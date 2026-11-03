@@ -34,6 +34,8 @@ La constante `SEED` dentro de `index.html` (una línea JSON larga) son los datos
 - Un gatillo fijo (`S.fijos[id]["AAAA-MM"]`) manda sobre el cálculo.
 - Un día "pasa" si: Mayor peor → valor > gatillo; Menor peor → valor < gatillo. Nivel `R` (relato) o `5` (solo 5XQ).
 - Un día está analizado si hay un registro del mismo indicador con fecha entre el día y `S.cfg.tol` días después. Nivel R exige relato; nivel 5 acepta relato o 5XQ.
+- La vista Mes muestra el cumplimiento **separado**: relatos = `hechoR / R`, 5XQ = `hecho5 / c5` (tarjetas arriba y una columna de cada uno en la tabla).
+- Relatos y 5XQ de enero a marzo 2026 vienen del Form anterior (`viejo.zip`), sumados directo a D1 con `wrangler d1 execute --file`; se procesaron con el mismo `cargarForms` de la página.
 - Verificado: con los datos de la hoja Septiembre, el cálculo da exactamente los gatillos de septiembre de "2. Indicadores".
 
 ## Unidades internas

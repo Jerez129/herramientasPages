@@ -75,6 +75,8 @@ body.dragging .wrap{outline:3px dashed var(--accent);outline-offset:-6px;border-
 .monthbar button{padding:6px 10px}
 
 .month{display:grid;grid-template-columns:minmax(250px,4fr) minmax(0,8fr);gap:14px}
+.month.dos{grid-template-columns:repeat(2,minmax(230px,1fr)) minmax(180px,.8fr)}
+.month.dos .tiles{grid-template-columns:1fr}
 .hero{display:flex;flex-direction:column;gap:8px}
 .hero .big{font-size:60px;font-weight:600;line-height:1;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
 .facts{display:flex;flex-direction:column;gap:3px;color:var(--ink-2);font-size:13px}
@@ -196,7 +198,7 @@ details summary{cursor:pointer;color:var(--accent);font-weight:500;width:max-con
 
 @media (max-width:780px){
   .wrap{padding-inline:16px}
-  .month{grid-template-columns:1fr}
+  .month,.month.dos{grid-template-columns:1fr}
   .hero .big{font-size:48px}
   .tabs button{padding:8px 10px}
 }
@@ -750,9 +752,14 @@ function render(){
 
 /* ----- Vista: Mes ----- */
 function vMes(){
-  var ins=activos(), T={disp:0,hecho:0,R:0,c5:0,pend:0,dato:0,sinG:0,reg:0}, rows=[];
-  ins.forEach(function(i){var r=resumen(i,UI.mes); rows.push([i,r]); T.disp+=r.c.disp;T.hecho+=r.c.hecho;T.R+=r.c.R;T.c5+=r.c.c5;T.pend+=r.c.pend;T.dato+=r.c.dato;T.reg+=r.c.reg; if(r.g.v==null)T.sinG++;});
-  var p=T.disp?T.hecho/T.disp:null;
+  var ins=activos(), T={R:0,c5:0,hechoR:0,hecho5:0,pend:0,dato:0,sinG:0}, rows=[];
+  ins.forEach(function(i){var r=resumen(i,UI.mes); rows.push([i,r]); T.R+=r.c.R;T.c5+=r.c.c5;T.hechoR+=r.c.hechoR;T.hecho5+=r.c.hecho5;T.pend+=r.c.pend;T.dato+=r.c.dato; if(r.g.v==null)T.sinG++;});
+  var regMes={R:0,'5':0}; S.reg.forEach(function(x){ if(x.f.slice(0,7)===UI.mes) regMes[x.t]++; });
+  // Cumplimiento separado: relatos = días que pasaron el gatillo de relato y tienen relato;
+  // 5XQ = días que pasaron solo el gatillo de 5XQ y tienen 5XQ (o relato).
+  var heroe=function(lbl,hecho,disp,txt,nreg,tipo){var p=disp?hecho/disp:null;
+    return '<div class="card hero"><span class="lbl">'+lbl+'</span><div class="big">'+pctTxt(p)+'</div>'+meter(p)+
+      '<div class="facts"><span>'+(disp?'<b class="num">'+hecho+'</b> de <b class="num">'+disp+'</b> '+txt:'Ningún día pasó este gatillo')+'</span><span>'+nreg+' '+tipo+' registrados en el mes</span></div></div>';};
   var h='<div class="sechead">'+monthbar()+'<div class="legend">'+chip('crit','Pasó el gatillo de relato')+chip('warn','Pasó el gatillo de 5XQ')+'</div></div>';
   var avisos=[];
   if(!S.regMeta.R&&!S.regMeta['5']) avisos.push('Carga las exportaciones de los Forms de Relatos y 5XQ para saber qué días ya se analizaron.');
@@ -763,21 +770,21 @@ function vMes(){
     if(m.hasta<ini) avisos.push('Los '+(t==='R'?'relatos':'5XQ')+' cargados llegan solo hasta el '+fechaCorta(m.hasta)+' '+m.hasta.slice(0,4)+': carga una exportación más reciente.');
     else avisos.push('Los '+(t==='R'?'relatos':'5XQ')+' cargados llegan hasta el '+fechaCorta(m.hasta)+'; los días siguientes pueden salir como pendientes.'); } });
   if(avisos.length) h+='<div class="note"><ul>'+avisos.map(function(a){return '<li>'+esc(a)+'</li>';}).join('')+'</ul></div>';
-  h+='<section class="month"><div class="card hero"><span class="lbl">Días analizados</span><div class="big">'+pctTxt(p)+'</div>'+meter(p)+
-    '<div class="facts"><span><b class="num">'+T.hecho+'</b> de <b class="num">'+T.disp+'</b> días que pasaron un gatillo tienen relato o 5XQ</span><span>'+T.reg+' relatos y 5XQ registrados en el mes</span></div></div>'+
-    '<div class="tiles"><div class="tile s-crit"><span class="lbl">Pasaron gatillo relato</span><b>'+T.R+'</b><small>días · indicador</small></div>'+
-    '<div class="tile"><span class="lbl">Solo gatillo 5XQ</span><b>'+T.c5+'</b><small>días · indicador</small></div>'+
-    '<div class="tile"><span class="lbl">Pendientes</span><b style="color:'+(T.pend?'var(--crit)':'inherit')+'">'+T.pend+'</b><small>sin análisis registrado'+(T.pend?' · <button type="button" class="quiet" data-act="vplan" style="padding:0;font-size:12px">planificar</button>':'')+'</small></div>'+
+  var pendR=T.R-T.hechoR, pend5=T.c5-T.hecho5;
+  h+='<section class="month dos">'+heroe('Cumplimiento de relatos',T.hechoR,T.R,'días que pasaron el gatillo de relato tienen relato',regMes.R,'relatos')+
+    heroe('Cumplimiento de 5XQ',T.hecho5,T.c5,'días que pasaron solo el gatillo de 5XQ tienen 5XQ',regMes['5'],'5XQ')+
+    '<div class="tiles"><div class="tile"><span class="lbl">Pendientes</span><b style="color:'+(T.pend?'var(--crit)':'inherit')+'">'+T.pend+'</b><small>'+pendR+' relato'+(pendR===1?'':'s')+' · '+pend5+' 5XQ'+(T.pend?' · <button type="button" class="quiet" data-act="vplan" style="padding:0;font-size:12px">planificar</button>':'')+'</small></div>'+
     '<div class="tile"><span class="lbl">Datos del mes</span><b>'+T.dato+'</b><small>días · indicador con valor</small></div></div></section>';
-  h+='<section class="card"><div class="sechead"><div><h2>Gatillos de '+esc(mesNombre(UI.mes))+'</h2><p class="sub">Gatillo de relato = promedio ± k × desviación estándar de los meses anteriores. El de 5XQ (matinal / cambio de turno) es más exigente según el margen.</p></div></div><div class="scroll"><table><thead><tr><th>Indicador</th><th class="r">Gatillo relato</th><th class="r">Gatillo 5XQ</th><th>Origen</th><th class="r">Pasaron<small>relato · 5XQ</small></th><th class="r">Analizados</th><th class="bar">Adherencia</th></tr></thead><tbody>';
+  h+='<section class="card"><div class="sechead"><div><h2>Gatillos de '+esc(mesNombre(UI.mes))+'</h2><p class="sub">Gatillo de relato = promedio ± k × desviación estándar de los meses anteriores. El de 5XQ (matinal / cambio de turno) es más exigente según el margen.</p></div></div><div class="scroll"><table><thead><tr><th>Indicador</th><th class="r">Gatillo relato</th><th class="r">Gatillo 5XQ</th><th>Origen</th><th class="bar">Relatos<small>hechos de los días que pasaron</small></th><th class="bar">5XQ<small>hechos de los días que pasaron</small></th></tr></thead><tbody>';
+  var celda=function(hecho,disp,st){ if(!disp) return '<span class="extra">Sin disparos</span>';
+    var p=hecho/disp; return meter(p)+'<span class="extra"><b class="num" style="color:var(--ink)">'+pctTxt(p)+'</b> · '+hecho+' de <span class="cell s-'+st+'" style="display:inline-block;padding:0 5px">'+disp+'</span>'+(disp-hecho?' · <span style="color:var(--crit)">'+(disp-hecho)+' pendiente'+(disp-hecho>1?'s':'')+'</span>':'')+'</span>'; };
   var area=null;
   rows.sort(function(a,b){return AREAS.indexOf(a[0].area)-AREAS.indexOf(b[0].area);}).forEach(function(x){
     var i=x[0],r=x[1],c=r.c;
-    if(i.area!==area){area=i.area;h+='<tr class="area"><td colspan="7">'+esc(area)+'</td></tr>';}
+    if(i.area!==area){area=i.area;h+='<tr class="area"><td colspan="6">'+esc(area)+'</td></tr>';}
     h+='<tr class="click" data-act="verind" data-id="'+i.id+'"><td class="name"><button type="button" data-act="verind" data-id="'+i.id+'">'+esc(i.nombre)+'</button><div class="extra">'+esc(i.sentido)+' · k='+i.k+'</div></td>'+
       '<td class="r">'+esc(fmt(r.g.v,i.unidad))+'</td><td class="r">'+esc(fmt(r.g.v5,i.unidad))+'</td><td>'+fuenteTxt(i,r.g)+'</td>'+
-      '<td class="r">'+(c.R?'<span class="cell s-crit" style="display:inline-block">'+c.R+'</span>':'0')+' · '+(c.c5?'<span class="cell s-warn" style="display:inline-block">'+c.c5+'</span>':'0')+'</td>'+
-      '<td class="r">'+c.hecho+' / '+c.disp+(c.pend?'<div class="extra" style="color:var(--crit)">'+c.pend+' pendiente'+(c.pend>1?'s':'')+'</div>':'')+'</td><td class="bar">'+(c.disp?meter(c.adh)+'<span class="extra">'+pctTxt(c.adh)+'</span>':'<span class="extra">Sin disparos</span>')+'</td></tr>';
+      '<td class="bar">'+celda(c.hechoR,c.R,'crit')+'</td><td class="bar">'+celda(c.hecho5,c.c5,'warn')+'</td></tr>';
   });
   h+='</tbody></table></div></section>';
   return h;
