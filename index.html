@@ -744,14 +744,14 @@ function vMes(){
     '<div class="tile"><span class="lbl">Solo gatillo 5XQ</span><b>'+T.c5+'</b><small>días · indicador</small></div>'+
     '<div class="tile"><span class="lbl">Pendientes</span><b style="color:'+(T.pend?'var(--crit)':'inherit')+'">'+T.pend+'</b><small>sin análisis registrado'+(T.pend?' · <button type="button" class="quiet" data-act="vplan" style="padding:0;font-size:12px">planificar</button>':'')+'</small></div>'+
     '<div class="tile"><span class="lbl">Datos del mes</span><b>'+T.dato+'</b><small>días · indicador con valor</small></div></div></section>';
-  h+='<section class="card"><div class="sechead"><div><h2>Gatillos de '+esc(mesNombre(UI.mes))+'</h2><p class="sub">Gatillo de relato = promedio ± k × desviación estándar de los meses anteriores. El de 5XQ (matinal / cambio de turno) es más exigente según el margen.</p></div></div><div class="scroll"><table><thead><tr><th>Indicador</th><th class="r">Gatillo relato</th><th class="r">Gatillo 5XQ</th><th>Origen</th><th class="r">Días con dato</th><th class="r">Pasaron<small>relato · 5XQ</small></th><th class="r">Analizados</th><th class="bar">Adherencia</th></tr></thead><tbody>';
+  h+='<section class="card"><div class="sechead"><div><h2>Gatillos de '+esc(mesNombre(UI.mes))+'</h2><p class="sub">Gatillo de relato = promedio ± k × desviación estándar de los meses anteriores. El de 5XQ (matinal / cambio de turno) es más exigente según el margen.</p></div></div><div class="scroll"><table><thead><tr><th>Indicador</th><th class="r">Gatillo relato</th><th class="r">Gatillo 5XQ</th><th>Origen</th><th class="r">Pasaron<small>relato · 5XQ</small></th><th class="r">Analizados</th><th class="bar">Adherencia</th></tr></thead><tbody>';
   var area=null;
   rows.sort(function(a,b){return AREAS.indexOf(a[0].area)-AREAS.indexOf(b[0].area);}).forEach(function(x){
     var i=x[0],r=x[1],c=r.c;
-    if(i.area!==area){area=i.area;h+='<tr class="area"><td colspan="8">'+esc(area)+'</td></tr>';}
+    if(i.area!==area){area=i.area;h+='<tr class="area"><td colspan="7">'+esc(area)+'</td></tr>';}
     h+='<tr class="click" data-act="verind" data-id="'+i.id+'"><td class="name"><button type="button" data-act="verind" data-id="'+i.id+'">'+esc(i.nombre)+'</button><div class="extra">'+esc(i.sentido)+' · k='+i.k+'</div></td>'+
       '<td class="r">'+esc(fmt(r.g.v,i.unidad))+'</td><td class="r">'+esc(fmt(r.g.v5,i.unidad))+'</td><td>'+fuenteTxt(i,r.g)+'</td>'+
-      '<td class="r">'+c.dato+'<span class="extra"> / '+diasMes(UI.mes)+'</span></td><td class="r">'+(c.R?'<span class="cell s-crit" style="display:inline-block">'+c.R+'</span>':'0')+' · '+(c.c5?'<span class="cell s-warn" style="display:inline-block">'+c.c5+'</span>':'0')+'</td>'+
+      '<td class="r">'+(c.R?'<span class="cell s-crit" style="display:inline-block">'+c.R+'</span>':'0')+' · '+(c.c5?'<span class="cell s-warn" style="display:inline-block">'+c.c5+'</span>':'0')+'</td>'+
       '<td class="r">'+c.hecho+' / '+c.disp+(c.pend?'<div class="extra" style="color:var(--crit)">'+c.pend+' pendiente'+(c.pend>1?'s':'')+'</div>':'')+'</td><td class="bar">'+(c.disp?meter(c.adh)+'<span class="extra">'+pctTxt(c.adh)+'</span>':'<span class="extra">Sin disparos</span>')+'</td></tr>';
   });
   h+='</tbody></table></div></section>';
