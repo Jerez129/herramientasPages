@@ -835,9 +835,24 @@ function porPlanificar(mes){
   activos().forEach(function(i){ var r=resumen(i,mes); r.dias.forEach(function(d){ if((d.est==='pend'||d.est==='parcial')&&!ya[i.id+'|'+d.f]) out.push({i:i,d:d,g:r.g}); }); });
   return out.sort(function(a,b){return a.d.f<b.d.f?-1:a.d.f>b.d.f?1:0;});
 }
+/* Relatos y 5XQ registrados en los Forms en el mes que no cubren ningún análisis guardado en el plan.
+   Se muestran en el plan como "Hecho · en Forms" sin guardarse en la base (se calculan cada vez).
+   Un registro cubre un análisis del plan si es del mismo indicador, con fecha entre el día y S.cfg.tol días después,
+   y del tipo que ese análisis pide (relato pide relato; 5XQ acepta cualquiera). */
+function planRealizados(mes){
+  regIndex();
+  var porInd={}; S.plan.forEach(function(p){(porInd[p.ind]=porInd[p.ind]||[]).push(p);});
+  var cubre=function(r){ return (porInd[r._i]||[]).some(function(p){ return r.f>=p.f && r.f<=addDias(p.f,S.cfg.tol) && (p.t==='5'||r.t==='R'); }); };
+  return S.reg.filter(function(r){ return r.f.slice(0,7)===mes && !(r._i&&cubre(r)); }).map(function(r){
+    var i=r._i?indById(r._i):null;
+    return {id:'auto|'+r.t+'|'+(r.id||'')+'|'+r.f, ind:r._i||'', indTxt:i?i.nombre:r.ind, area:i?i.area:r.a, f:r.f, t:r.t, resp:r.t==='R'?r.resp||'':'', lim:'',
+      nota:(i?'':'Indicador sin gatillo')+(r.ruta?(i?'':' · ')+'Ruta '+r.ruta:''), hecho:false, auto:true};
+  });
+}
 function vPlan(){
   var abiertos=UI.planVer==='abiertos', orden={venc:0,pend:1,hecho:2,forms:3}, cmp=function(a,b){return a<b?-1:a>b?1:0;};
   var lst=S.plan.filter(function(p){ if(!indById(p.ind)) return false; p._e=planEstado(p); return abiertos?(p._e==='pend'||p._e==='venc'):p.f.slice(0,7)===UI.mes; })
+    .concat(abiertos?[]:planRealizados(UI.mes).map(function(p){p._e='forms'; return p;}))
     .sort(function(a,b){return orden[a._e]-orden[b._e]||cmp(a.lim||'9999',b.lim||'9999')||cmp(a.f,b.f);});
   var T={hecho:0,pend:0,venc:0,sinR:0};
   lst.forEach(function(p){ if(p._e==='forms'||p._e==='hecho') T.hecho++; else { T[p._e]++; if(p.t==='R'&&!p.resp) T.sinR++; } });
@@ -866,7 +881,7 @@ function vPlan(){
     }
     h+='</section>';
   }
-  h+='<section class="card"><div class="sechead"><div><span class="lbl">Plan</span><h2>'+(abiertos?'Análisis abiertos':'Análisis de '+esc(mesNombre(UI.mes)))+'</h2><p class="sub">Queda hecho solo cuando el relato o 5XQ aparece en los Forms cargados. Si ya se hizo y aún no está en los Forms, márcalo a mano.</p></div>'+
+  h+='<section class="card"><div class="sechead"><div><span class="lbl">Plan</span><h2>'+(abiertos?'Análisis abiertos':'Análisis de '+esc(mesNombre(UI.mes)))+'</h2><p class="sub">Queda hecho solo cuando el relato o 5XQ aparece en los Forms cargados. Todos los relatos y 5XQ registrados en los Forms aparecen solos como hechos, aunque el día no haya pasado el gatillo. Si ya se hizo y aún no está en los Forms, márcalo a mano.</p></div>'+
     '<div class="row"><button type="button" data-act="pformato" title="Trae los días por planificar de '+esc(mesNombre(UI.mes))+'">Descargar formato</button><label class="btn" for="file">Cargar plan</label></div></div>'+
     '<p class="hint" style="margin-top:6px">El formato de Excel viene con los días por planificar de '+esc(mesNombre(UI.mes))+'. Complétalo y súbelo con "Cargar plan": se agrega al plan sin borrar lo que ya está.</p>'+
     '<details style="margin-top:10px"><summary>Agregar un análisis a mano</summary><div class="form" style="margin-top:10px">'+
@@ -879,6 +894,12 @@ function vPlan(){
   if(!lst.length) h+='<tr><td colspan="9" class="sub">'+(abiertos?'No hay análisis abiertos.':'Nada planificado en este mes.')+'</td></tr>';
   lst.forEach(function(p){
     var i=indById(p.ind), e=p._e;
+    if(p.auto){  // realizado que se agrega solo: se ve, pero no se edita ni se borra
+      h+='<tr class="done"><td class="num" style="white-space:nowrap">'+fechaCorta(p.f)+'</td><td>'+esc(p.indTxt)+'<div class="extra">'+esc(p.area||'')+'</div></td><td>'+(p.t==='R'?'Relato':'5XQ')+'</td>'+
+        '<td>'+(p.t==='R'?esc(p.resp)||'<span class="extra">—</span>':'<span class="extra">No aplica</span>')+'</td><td><span class="extra">—</span></td><td class="extra">'+esc(p.nota)+'</td>'+
+        '<td><span class="pill s-good">Hecho · en Forms</span></td><td class="c"><input type="checkbox" checked disabled aria-label="Hecho"></td><td></td></tr>';
+      return;
+    }
     var est=e==='forms'?'<span class="pill s-good">Hecho · en Forms</span>':e==='hecho'?'<span class="pill s-good">Hecho · marcado</span><div class="extra">aún no está en los Forms</div>':e==='venc'?'<span class="pill s-crit">Vencido</span>':'<span class="pill s-warn">Pendiente</span>';
     h+='<tr'+(e==='forms'||e==='hecho'?' class="done"':'')+'><td class="num" style="white-space:nowrap">'+fechaCorta(p.f)+'</td><td>'+esc(i.nombre)+'<div class="extra">'+esc(i.area)+'</div></td><td>'+(p.t==='R'?'Relato':'5XQ')+'</td>'+
       '<td>'+(p.t==='R'?'<input type="text" class="resp" list="dlResp" data-pid="'+p.id+'" data-pf="resp" value="'+esc(p.resp)+'" aria-label="Responsable">':'<span class="extra">No aplica</span>')+'</td>'+

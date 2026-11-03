@@ -63,6 +63,7 @@ S = { v:1,
 - Estado (`planEstado`): `forms` si `regsDia()` trae el análisis (relato exige relato; 5XQ acepta cualquiera), `hecho` si se marcó a mano, `venc` si pasó `lim`, si no `pend`.
 - `indN` guarda el nombre del indicador para reubicar el plan al volver a los datos del Excel anterior (los ids cambian).
 - Solo los relatos llevan responsable; en los 5XQ `resp` queda vacío (`nuevoPlan`).
+- `planRealizados(mes)`: cada relato / 5XQ de `S.reg` del mes que no cubre un análisis guardado del plan aparece en la tabla del plan como "Hecho · en Forms" (filas `auto`, solo lectura). **No se guardan en la base**: se calculan cada vez, así no hace falta la clave ni botón. Incluye registros de indicadores sin gatillo ("Indicador sin gatillo"). No van en la hoja Plan del respaldo.
 - Hoja **Plan**: con hoja Indicadores (respaldo completo) reemplaza el plan; sola (formato del plan) agrega o actualiza por indicador + día + tipo.
 - Menú "Descargar plantillas": `plantillaDatos()` (sin hoja Indicadores, así que al cargarla solo agrega), `formatoPlan(conDias)`, `exportar()` (respaldo completo).
 
