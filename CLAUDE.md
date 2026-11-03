@@ -19,7 +19,7 @@ GitHub: `Jerez129/herramientasPages`, Pages desde `main` / raíz → https://jer
 
 - Tablas: `datos(ind,f,v,o)`, `regs(t,data)`, `plan(id,data)`, `config(key,value)` con `ind`, `fijos`, `cfg`, `regMeta`. Esquema en `gatillos-api/schema.sql`.
 - Rutas: `GET /api/state`; `PUT /api/config/:key`; `POST /api/datos {put,del}`; `POST /api/regs/:t {rows,first}` (first borra los de ese tipo); `POST /api/plan {put,del}`.
-- Leer y guardar son libres mientras el Worker no tenga el secreto `EDIT_KEY` (como acciones-api). Con `EDIT_KEY`, la página pide la clave (botón de estado de la base en el encabezado) y la guarda en localStorage `gatillos-bvr-clave`.
+- Leer es libre. Guardar pide el secreto `EDIT_KEY` (configurado el 2026-11-03; solo el usuario conoce la clave). La página pide la clave (botón de estado de la base en el encabezado) y la guarda en localStorage `gatillos-bvr-clave`.
 - En la página: `guardar()` guarda local y programa `sync()`, que compara `foto(S)` con `DB.snap` (lo que está en la base) y manda solo lo que cambió. `guardarUI()` es para cambios de vista (no van a la base). `pull()` al abrir: si la base está vacía sube lo local; si hay cambios locales sin subir (`gatillos-bvr-pend`) los sube (lo local gana); si no, toma la base.
 - D1 permite 100 valores por consulta: el Worker arma INSERT de varias filas (`multi`) y la página manda en partes.
 
@@ -90,4 +90,4 @@ Abre `index.html` con doble clic (sin base: el Worker solo acepta GitHub Pages y
 - En el Excel anterior los valores se ordenaron sin mover sus fechas: los datos con origen "Excel anterior" (junio–agosto 2026) tienen el conjunto de valores correcto pero el día no es confiable. Se marcan "aprox.".
 - Faltan datos diarios de septiembre y octubre 2026 para el gatillo de noviembre.
 - Crítica y No cargado cambiaron de unidad en julio 2026 (de % a HL); los gatillos fijos de feb–jun quedaron en %.
-- Si se quiere clave de edición: `npx wrangler secret put EDIT_KEY` dentro de `gatillos-api/`.
+- Cambiar la clave de edición: `npx.cmd wrangler secret put EDIT_KEY` dentro de `gatillos-api/` (en PowerShell `npx` sin `.cmd` está bloqueado).
