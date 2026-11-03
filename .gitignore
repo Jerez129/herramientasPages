@@ -6,3 +6,4 @@
 src.html
 # El Worker (gatillos-api) se publica con wrangler, no va en el repositorio de la página.
 gatillos-api/
+*.zip
