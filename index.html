@@ -606,6 +606,7 @@ function cargarForms(wb,nombre){
   var H=best.rows[best.hi].map(norm), col=function(fn){for(var i=0;i<H.length;i++) if(H[i]&&fn(H[i])) return i; return -1;};
   var cols=function(fn){var o=[];for(var i=0;i<H.length;i++) if(H[i]&&fn(H[i])) o.push(i);return o;};
   var C={
+    id:col(function(h){return h==='id';}),
     fecha:col(function(h){return h==='fecha'||h==='fecha ';}),
     fecha2:col(function(h){return /^fecha/.test(h)&&!/plan|realizacion|creacion/.test(h);}),
     fin:col(function(h){return /completion time|hora de finalizacion/.test(h);}),
@@ -623,7 +624,7 @@ function cargarForms(wb,nombre){
     cron:col(function(h){return /cronica/.test(h);})
   };
   if(C.fecha<0) C.fecha=C.fecha2>=0?C.fecha2:C.fin;
-  var es5 = /5\s*x\s*q|5xq|5 porq|5 why/i.test(nombre+' '+best.sn) || H.some(function(h){return /supervisor de turno|conferente|^chofer/.test(h);});
+  var es5 = /5\s*x\s*q|5\s*por\s*qu|5\s*why/i.test(norm(nombre+' '+best.sn)) || H.some(function(h){return /supervisor de turno|conferente|^chofer/.test(h);});
   var t=es5?'5':'R', out=[], otros=0, sinF=0;
   best.rows.slice(best.hi+1).forEach(function(r){
     var g=function(i){return i>=0&&r[i]!=null?String(r[i]).trim():'';};
@@ -634,14 +635,25 @@ function cargarForms(wb,nombre){
     var resp=''; for(j=0;j<C.resp.length&&!resp;j++) resp=g(C.resp[j]);
     var pq=C.pq.map(function(i){return g(i);}).filter(Boolean);
     if(pq.length&&pq.every(function(p){return /^prueba$/i.test(p);})) return;
-    out.push({t:t,f:fe,a:g(C.area),ind:ind,resp:resp,chofer:g(C.chofer),ruta:g(C.ruta),res:g(C.res)||g(C.resRuta),
-      pq1:(pq[0]||'').slice(0,240),causa:g(C.causa).slice(0,400),acc:g(C.acc).slice(0,400),cron:/^s/i.test(g(C.cron))?'Sí':g(C.cron)?'No':''});
+    var x={t:t,f:fe,a:g(C.area),ind:ind,resp:resp,chofer:g(C.chofer),ruta:g(C.ruta),res:g(C.res)||g(C.resRuta),
+      pq1:(pq[0]||'').slice(0,240),causa:g(C.causa).slice(0,400),acc:g(C.acc).slice(0,400),cron:/^s/i.test(g(C.cron))?'Sí':g(C.cron)?'No':''};
+    if(g(C.id)) x.id=g(C.id);
+    out.push(x);
   });
   if(!out.length) return {err:nombre+': no encontré registros de Bávaro con fecha e indicador'+(otros?' ('+otros+' eran de otros centros)':'')+'.'};
-  S.reg=S.reg.filter(function(x){return x.t!==t;}).concat(out);
-  var fs=out.map(function(x){return x.f;}).sort();
-  S.regMeta[t]={archivo:nombre,cargado:ymd(new Date()),n:out.length,desde:fs[0],hasta:fs[fs.length-1]};
-  return {msg:nombre+': '+out.length+' '+(es5?'5XQ':'relatos')+' de Bávaro ('+fechaCorta(fs[0])+' '+fs[0].slice(0,4)+' a '+fechaCorta(fs[fs.length-1])+' '+fs[fs.length-1].slice(0,4)+')'+(otros?' · '+otros+' de otros centros ignorados':'')+(sinF?' · '+sinF+' sin fecha':'')+'. Se reemplazaron los '+(es5?'5XQ':'relatos')+' cargados antes.'};
+  // Con ID de respuesta se suman: una exportación partida en varios archivos (1-5000, 5001-7564) no borra la otra parte,
+  // y una respuesta que ya estaba se actualiza. Sin ID, el archivo reemplaza todos los registros de su tipo.
+  var conId=out.every(function(x){return x.id;}), ids={}, habia={};
+  out.forEach(function(x){ids[x.id]=1;});
+  S.reg.forEach(function(x){ if(x.t===t&&x.id) habia[x.id]=1; });
+  S.reg=S.reg.filter(function(x){ return x.t!==t || (conId && x.id && !ids[x.id]); }).concat(out);
+  var todos=S.reg.filter(function(x){return x.t===t;}), fs=todos.map(function(x){return x.f;}).sort(), fo=out.map(function(x){return x.f;}).sort();
+  var nuevos=out.filter(function(x){return !habia[x.id];}).length, arch=conId&&S.regMeta[t]?S.regMeta[t].archivo.split(' + '):[];
+  if(arch.indexOf(nombre)<0) arch.push(nombre);
+  S.regMeta[t]={archivo:arch.join(' + '),cargado:ymd(new Date()),n:todos.length,desde:fs[0],hasta:fs[fs.length-1]};
+  var tipo=es5?'5XQ':'relatos';
+  return {msg:nombre+': '+out.length+' '+tipo+' de Bávaro ('+fechaCorta(fo[0])+' '+fo[0].slice(0,4)+' a '+fechaCorta(fo[fo.length-1])+' '+fo[fo.length-1].slice(0,4)+')'+(otros?' · '+otros+' de otros centros ignorados':'')+(sinF?' · '+sinF+' sin fecha':'')+
+    (conId?'. '+nuevos+' nuevos, '+(out.length-nuevos)+' ya estaban. Total de '+tipo+': '+todos.length+'.':'. Se reemplazaron los '+tipo+' cargados antes (el archivo no trae la columna ID).')};
 }
 
 /* ---------------- exportar plantilla ---------------- */
@@ -1022,7 +1034,7 @@ function vReg(){
   var h='<section class="month"><div class="card hero"><span class="lbl">Exportaciones de los Forms</span>'+
     '<div class="facts" style="font-size:14px"><span><b>Relatos:</b> '+(R?R.n+' de Bávaro, '+R.desde+' a '+R.hasta+' · '+esc(R.archivo)+' (cargado '+R.cargado+')':'no cargados')+'</span>'+
     '<span><b>5XQ:</b> '+(F?F.n+' de Bávaro, '+F.desde+' a '+F.hasta+' · '+esc(F.archivo)+' (cargado '+F.cargado+')':'no cargados')+'</span></div>'+
-    '<p class="hint">Descarga las respuestas de cada Forms en Excel y arrástralas aquí. Cada archivo reemplaza los registros de su tipo.</p></div>';
+    '<p class="hint">Descarga las respuestas de cada Forms en Excel y arrástralas aquí. Se suman por número de respuesta (ID): si la exportación viene en varios archivos, carga todos; una respuesta que ya estaba se actualiza.</p></div>';
   var sin=Object.keys(ri.sinInd).sort(function(a,b){return ri.sinInd[b]-ri.sinInd[a];});
   h+='<div class="card"><h2>Indicadores de los Forms sin gatillo</h2><p class="sub" style="margin:4px 0 8px">Si alguno es el mismo que uno del catálogo, únelo; si no, se queda como registro sin gatillo.</p>';
   if(!sin.length) h+='<p class="sub">'+(S.reg.length?'Todos los registros se unieron a un indicador.':'Sin registros cargados.')+'</p>';

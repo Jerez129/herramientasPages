@@ -69,9 +69,9 @@ S = { v:1,
 ## Carga de archivos (`procesar`)
 
 - Si el libro tiene hoja **Indicadores** → reemplaza catálogo, datos y gatillos fijos. Si solo trae **Datos** → agrega/actualiza.
-- Si no, se trata como exportación de Forms: busca la fila de encabezados con "Indicador", detecta columnas por nombre (`cargarForms`), filtra centro Bávaro, y reemplaza todos los registros de ese tipo. Es 5XQ si el nombre del archivo/hoja dice 5XQ o hay columnas de supervisor/chofer.
+- Si no, se trata como exportación de Forms: busca la fila de encabezados con "Indicador", detecta columnas por nombre (`cargarForms`), filtra centro Bávaro. Los registros se **suman por la columna ID** (número de respuesta de Forms, guardado en `reg[].id`): una exportación partida en varios archivos (5XQ viene en 1-5000 y 5001-7564) no borra la otra parte, y una respuesta repetida se actualiza. Sin columna ID, el archivo reemplaza todos los registros de su tipo. Es 5XQ si el nombre del archivo/hoja dice 5XQ / "5 por qué" o hay columnas de supervisor/conferente/chofer.
 - Unión Forms ↔ indicador: `alias` del catálogo. `Área|Nombre` para nombres repetidos en varias áreas (ej. "Distribución|Roturas").
-- Las columnas de los Forms se probaron con archivos armados a partir del Excel, **no con una exportación real**. Si una exportación real falla, ajusta las expresiones de `cargarForms`.
+- Probado con las exportaciones reales de 2026 (encabezados en español: "Hora de inicio", "Centro", "Responsable-DOxx", "Indicador/2/3", "Resultado"): 297 relatos y 349 5XQ de Bávaro de 9.461 respuestas. Algunos indicadores de los Forms no tienen gatillo (Carga de Camiones, Productividad de Picking, TMA, ADF…): se quedan como registros sin gatillo.
 
 ## Convenciones (iguales a los otros tableros del usuario)
 
