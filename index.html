@@ -485,7 +485,8 @@ function resumen(ind,mes){
   var n=diasMes(mes);
   for(var d=1;d<=n;d++){
     var f=mes+'-'+pad(d), x=dd[f], rg=regsDia(ind,f);
-    var v=x?x.v:null, lv=nivel(ind,v,g);
+    // Los días inventados (o 'i') solo sirven para calcular el gatillo: no cuentan como días que lo pasaron.
+    var v=x?x.v:null, lv=x&&x.o==='i'?'':nivel(ind,v,g);
     if(x) c.dato++;
     var tieneR=rg.some(function(r){return r.t==='R';}), tiene5=rg.some(function(r){return r.t==='5';});
     var est='';
@@ -545,7 +546,7 @@ function cargarPlantilla(wb,nombre){
     filas(wsD).slice(1).forEach(function(r){
       var ind=byN[norm(r[0])]; if(!ind){ if(r[0]!=null&&String(r[0]).trim()) sinInd[r[0]]=1; return; }
       var fe=parseFecha(r[1]), v=parseVal(r[2],ind.unidad); if(!fe||v==null){omit++;return;}
-      var o=/excel anterior/i.test(String(r[3]||''))?'x':'p';
+      var o=/excel anterior/i.test(String(r[3]||''))?'x':/inventad/i.test(String(r[3]||''))?'i':'p';
       (nuevos[ind.id]=nuevos[ind.id]||{})[fe]={v:v,o:o}; n++;
     });
     if(wsI) S.datos=nuevos;
@@ -679,7 +680,7 @@ function exportar(){
   w=XLSX.utils.aoa_to_sheet(I); w['!cols']=[{wch:28},{wch:14},{wch:12},{wch:12},{wch:14},{wch:14},{wch:13},{wch:70},{wch:8}]; XLSX.utils.book_append_sheet(wb,w,'Indicadores');
   var D=[['Indicador','Fecha','Valor','Origen']], fmts=[];
   S.ind.forEach(function(i){var dd=S.datos[i.id]||{};Object.keys(dd).sort().forEach(function(f){
-    D.push([i.nombre,new Date(+f.slice(0,4),+f.slice(5,7)-1,+f.slice(8,10)),dd[f].v,dd[f].o==='x'?'Excel anterior':dd[f].o==='m'?'Escrito en la página':'Plantilla']); fmts.push(Z[i.unidad]);});});
+    D.push([i.nombre,new Date(+f.slice(0,4),+f.slice(5,7)-1,+f.slice(8,10)),dd[f].v,dd[f].o==='x'?'Excel anterior':dd[f].o==='i'?'Inventado':dd[f].o==='m'?'Escrito en la página':'Plantilla']); fmts.push(Z[i.unidad]);});});
   w=XLSX.utils.aoa_to_sheet(D,{cellDates:true});
   for(var r=1;r<D.length;r++){ var a=XLSX.utils.encode_cell({r:r,c:1}), b=XLSX.utils.encode_cell({r:r,c:2}); if(w[a]) w[a].z='yyyy-mm-dd'; if(w[b]) w[b].z=fmts[r-1]; }
   w['!cols']=[{wch:28},{wch:12},{wch:12},{wch:22}]; XLSX.utils.book_append_sheet(wb,w,'Datos');
@@ -914,7 +915,7 @@ function vDet(){
   if(!r.dias.length) h+='<tr><td colspan="6" class="sub">Sin datos ni registros este mes.</td></tr>';
   r.dias.forEach(function(d){
     var st=d.lv==='R'?'crit':d.lv==='5'?'warn':d.lv==='ok'?'good':'none';
-    var lvTxt=d.lv==='R'?'Pasó relato':d.lv==='5'?'Pasó 5XQ':d.lv==='ok'?'Dentro':'—';
+    var lvTxt=d.lv==='R'?'Pasó relato':d.lv==='5'?'Pasó 5XQ':d.lv==='ok'?'Dentro':d.x&&d.x.o==='i'?'Inventado (solo para el cálculo)':'—';
     var an=d.rg.length?'<div class="pills">'+d.rg.map(function(x){return '<span class="pill s-good">'+(x.t==='R'?'Relato':'5XQ')+(x.f!==d.f?' · '+fechaCorta(x.f):'')+(x.ruta?' · '+esc(x.ruta):'')+'</span>';}).join('')+'</div>':
       (d.est==='pend'?'<span class="pill s-crit">Falta '+(d.lv==='R'?'relato':'5XQ')+'</span>':'');
     if(d.est==='parcial') an+='<div class="extra" style="color:var(--crit)">Pasó el gatillo de relato: falta el relato</div>';
@@ -928,7 +929,7 @@ function vDet(){
 function dibujarChart(){
   var box=$('chart'); if(!box) return;
   var i=indById(UI.ind), r=resumen(i,UI.mes), g=r.g, n=diasMes(UI.mes), dd=S.datos[i.id]||{};
-  var pts=[]; for(var d=1;d<=n;d++){var f=UI.mes+'-'+pad(d); if(dd[f]) pts.push({d:d,f:f,v:dd[f].v,lv:nivel(i,dd[f].v,g)});}
+  var pts=[]; for(var d=1;d<=n;d++){var f=UI.mes+'-'+pad(d); if(dd[f]) pts.push({d:d,f:f,v:dd[f].v,lv:dd[f].o==='i'?'':nivel(i,dd[f].v,g)});}
   if(!pts.length){box.innerHTML='<p class="sub" style="padding:24px 0">Sin datos diarios en '+esc(mesNombre(UI.mes))+'.</p>';return;}
   var W=Math.max(320,box.clientWidth||900), H=260, L=64, R=12, T=14, B=26;
   var vs=pts.map(function(p){return p.v;}); if(g.v!=null){vs.push(g.v);vs.push(g.v5);}
@@ -969,7 +970,7 @@ function vDat(){
     (filasD.length?'<button type="button" class="danger" data-act="dborrarmes">Borrar '+(mesF?'este mes':'todos')+'</button>':'')+'</div></div>'+
     '<div id="confirmD"></div><div class="scroll"><table><thead><tr><th>Fecha</th><th class="r">Valor</th><th>Origen</th><th></th></tr></thead><tbody>';
   if(!filasD.length) h+='<tr><td colspan="4" class="sub">Sin datos.</td></tr>';
-  filasD.slice(0,400).forEach(function(f){var x=dd[f];h+='<tr><td class="num">'+f+'</td><td class="r">'+esc(fmt(x.v,i.unidad))+'</td><td class="extra">'+(x.o==='x'?'Excel anterior (fecha aprox.)':x.o==='m'?'Escrito en la página':'Plantilla')+'</td><td><button type="button" class="rm" data-act="ddel" data-id="'+i.id+'" data-f="'+f+'" aria-label="Borrar '+f+'">×</button></td></tr>';});
+  filasD.slice(0,400).forEach(function(f){var x=dd[f];h+='<tr><td class="num">'+f+'</td><td class="r">'+esc(fmt(x.v,i.unidad))+'</td><td class="extra">'+(x.o==='x'?'Excel anterior (fecha aprox.)':x.o==='i'?'Inventado (solo para el cálculo)':x.o==='m'?'Escrito en la página':'Plantilla')+'</td><td><button type="button" class="rm" data-act="ddel" data-id="'+i.id+'" data-f="'+f+'" aria-label="Borrar '+f+'">×</button></td></tr>';});
   if(filasD.length>400) h+='<tr><td colspan="4" class="sub">Se muestran 400 de '+filasD.length+'. Elige un mes para ver el resto.</td></tr>';
   h+='</tbody></table></div></section>';
   return h;

@@ -85,9 +85,17 @@ S = { v:1,
 
 Abre `index.html` con doble clic (sin base: el Worker solo acepta GitHub Pages y localhost). Para probar con la base: `python -m http.server 8765` y abrir `http://127.0.0.1:8765/`; ojo, eso escribe en la base real. `?mes=2026-06` abre en ese mes. Con Playwright: interceptar `cdnjs` si no hay red y servir `xlsx.full.min.js` local.
 
+## Fuentes de datos reales (en la carpeta, no van al repositorio)
+
+- `tiempo.zip` → `tiempo.xlsx` (hoja DATA, una fila por ruta y día): columnas `TML` (25), `Tiempo en Ruta` (26), `Tiempo Interno` (30). El dato diario de la página = **promedio de todas las rutas del día**. Verificado: coincide exacto con los datos de agosto 2026 que venían del Excel.
+- `Rutina_Cumplimiento_Resultados_<Mes>.xlsx`, hoja **Diaria logistica**: fila de encabezado con "INDICADOR" y "DISPARADOR" (= gatillo del mes) y fechas como números de Excel; una fila por KPI (DEVOLUCION, ROTURA [DE] DISTRIBUCION / ALMACEN, DIFERENCIA [DE] INVENTARIO, CRITICA, NO CARGADO, TIEMPO MTTO CORRECTIVO / TIEMPO MEDIO DE REPARACION, MODULACION). El archivo de Septiembre trae el encabezado con fechas de agosto: hay que tomar el mes del nombre del archivo y el día de la columna. Enero_2025 y Febrero_2025 son de 2025.
+- Rotura tiene dos filas en distinta unidad (unidades vs HL); Crítica de Rutina (cientos) no coincide con los datos depurados del Excel. En el Excel se quitaban a mano los días atípicos (los que pasaron el gatillo de su mes) antes de calcular.
+- `Planilla_Datos_CD_Bavaro_2025-10_a_2026-10.xlsx`: planilla completa armada con esas fuentes (origen Plantilla = real, Excel anterior, Inventado = meses sin fuente, hasta ago 2026). Hoja Resumen: gatillo fijo vs calculado. Los scripts que la generaron estaban en el scratchpad de la sesión (no se guardaron en el proyecto).
+- Origen `i` (Inventado): cuenta para el cálculo del gatillo, pero `resumen()` y la gráfica no lo marcan como día que pasó el gatillo.
+
 ## Pendiente / conocido
 
 - En el Excel anterior los valores se ordenaron sin mover sus fechas: los datos con origen "Excel anterior" (junio–agosto 2026) tienen el conjunto de valores correcto pero el día no es confiable. Se marcan "aprox.".
-- Faltan datos diarios de septiembre y octubre 2026 para el gatillo de noviembre.
+- Septiembre y octubre 2026 ya tienen datos reales en la planilla completa (si el usuario la carga). Revisar el gatillo de noviembre de Crítica, Devolución y Tiempo interno: septiembre no se pudo depurar (el gatillo fijo no corresponde a la escala de los datos).
 - Crítica y No cargado cambiaron de unidad en julio 2026 (de % a HL); los gatillos fijos de feb–jun quedaron en %.
 - Cambiar la clave de edición: `npx.cmd wrangler secret put EDIT_KEY` dentro de `gatillos-api/` (en PowerShell `npx` sin `.cmd` está bloqueado).
