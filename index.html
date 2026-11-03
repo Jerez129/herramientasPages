@@ -1,0 +1,1187 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gatillos CD Bávaro</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@500;600&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+/* Tablero de gatillos: mes arriba (cuántos días pasaron el gatillo y cuántos se analizaron), luego gatillos del año, detalle por indicador, datos, indicadores y registros de los Forms. */
+:root{
+  --bg:#f2f4f7; --surface:#fcfdfd; --sunken:#eef1f4;
+  --ink:#0d1116; --ink-2:#465060; --muted:#677280;
+  --line:#dde2e8; --axis:#b9c2cc;
+  --accent:#1c5cab; --accent-ink:#ffffff; --series:#2a78d6;
+  --good:#0ca30c; --warn:#fab219; --crit:#d03b3b;
+  --font:"IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-label:"IBM Plex Sans Condensed", "IBM Plex Sans", system-ui, sans-serif;
+  --r:6px;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0e1114; --surface:#171b20; --sunken:#11151a;
+    --ink:#f3f5f7; --ink-2:#b8c0ca; --muted:#8a94a0;
+    --line:#2a3039; --axis:#3b434e;
+    --accent:#6da7ec; --accent-ink:#0d1116; --series:#3987e5;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0e1114; --surface:#171b20; --sunken:#11151a;
+  --ink:#f3f5f7; --ink-2:#b8c0ca; --muted:#8a94a0;
+  --line:#2a3039; --axis:#3b434e;
+  --accent:#6da7ec; --accent-ink:#0d1116; --series:#3987e5;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font);font-size:14px;line-height:1.45}
+.wrap{max-width:1180px;margin:0 auto;padding-inline:20px;padding-block:22px 48px;display:flex;flex-direction:column;gap:22px}
+h1,h2,h3,p{margin:0}
+h1{font-size:24px;font-weight:600;letter-spacing:-.01em;text-wrap:balance}
+h2{font-size:16px;font-weight:600;text-wrap:balance}
+.lbl{font-family:var(--font-label);font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-2)}
+.sub{color:var(--ink-2);overflow-wrap:anywhere}
+.num{font-variant-numeric:tabular-nums}
+.top{display:flex;flex-wrap:wrap;gap:14px 24px;align-items:flex-end;justify-content:space-between}
+.top > div:first-child{min-width:0;display:flex;flex-direction:column;gap:4px}
+.ctrls{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+button,select,.btn{font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--axis);border-radius:var(--r);padding:7px 12px;cursor:pointer;line-height:1.3}
+button:hover,.btn:hover,select:hover{border-color:var(--ink-2)}
+.btn.pri,button.pri{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:500}
+.btn.pri:hover,button.pri:hover{filter:brightness(1.08)}
+button.quiet{border-color:transparent;background:transparent;color:var(--ink-2);text-decoration:underline;text-underline-offset:3px;padding-inline:6px}
+button.danger{color:var(--crit);border-color:color-mix(in srgb,var(--crit) 50%,var(--axis))}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.vh{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+.msg,.note{border:1px solid var(--crit);border-left-width:4px;background:var(--surface);padding:10px 14px;border-radius:var(--r);display:flex;gap:12px;align-items:flex-start;justify-content:space-between}
+.note{border-color:var(--warn)}
+.note.ok{border-color:var(--good)}
+.msg ul,.note ul{margin:4px 0 0;padding-left:18px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:16px 18px;min-width:0}
+.sechead{display:flex;flex-wrap:wrap;gap:10px 20px;align-items:center;justify-content:space-between}
+.sechead > div:first-child:not(.monthbar):not(.row){display:flex;flex-direction:column;gap:3px;min-width:0}
+body.dragging .wrap{outline:3px dashed var(--accent);outline-offset:-6px;border-radius:12px}
+[hidden]{display:none!important}
+
+.tabs{display:flex;flex-wrap:wrap;gap:2px;border-bottom:1px solid var(--axis)}
+.tabs button{border:0;border-bottom:3px solid transparent;border-radius:0;background:none;padding:9px 14px 8px;color:var(--ink-2);font-weight:500;margin-bottom:-1px}
+.tabs button:hover{color:var(--ink)}
+.tabs button[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--accent)}
+.view{display:flex;flex-direction:column;gap:22px}
+
+.monthbar{display:flex;align-items:center;gap:6px}
+.monthbar strong{min-width:150px;text-align:center;font-size:15px}
+.monthbar button{padding:6px 10px}
+
+.month{display:grid;grid-template-columns:minmax(250px,4fr) minmax(0,8fr);gap:14px}
+.hero{display:flex;flex-direction:column;gap:8px}
+.hero .big{font-size:60px;font-weight:600;line-height:1;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.facts{display:flex;flex-direction:column;gap:3px;color:var(--ink-2);font-size:13px}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.tile{border:1px solid var(--line);border-radius:var(--r);padding:10px 12px;display:flex;flex-direction:column;gap:2px;background:var(--surface)}
+.tile b{font-size:26px;font-weight:600;font-variant-numeric:tabular-nums;line-height:1.1}
+.tile small{color:var(--ink-2);font-size:12px}
+.meter{height:8px;border-radius:4px;background:var(--trk);overflow:hidden}
+.meter i{display:block;height:100%;background:var(--st);border-radius:0 4px 4px 0}
+.s-good{--st:var(--good);--trk:color-mix(in srgb,var(--good) 18%,var(--surface))}
+.s-warn{--st:var(--warn);--trk:color-mix(in srgb,var(--warn) 24%,var(--surface))}
+.s-crit{--st:var(--crit);--trk:color-mix(in srgb,var(--crit) 16%,var(--surface))}
+.s-none{--st:var(--axis);--trk:var(--sunken)}
+.chip{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:500;white-space:nowrap}
+.chip i{font-style:normal;display:inline-grid;place-items:center;width:16px;height:16px;border-radius:50%;background:var(--st);color:#fff;font-size:10px;font-weight:700;line-height:1}
+.chip.s-warn i{color:#1b1400}
+.legend{display:flex;flex-wrap:wrap;gap:4px 14px;color:var(--ink-2)}
+.legend .chip{font-weight:400}
+
+.scroll{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}
+th,td{padding:7px 10px;text-align:left;border-bottom:1px solid var(--line);vertical-align:middle}
+thead th{font-family:var(--font-label);font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-2);white-space:nowrap;border-bottom-color:var(--axis)}
+thead th small{display:block;font-family:var(--font);font-size:10.5px;font-weight:400;letter-spacing:0;text-transform:none;color:var(--muted)}
+td.r,th.r{text-align:right;white-space:nowrap}
+td.c,th.c{text-align:center}
+tr.area td{background:var(--sunken);font-weight:600;border-bottom-color:var(--axis)}
+tr.click{cursor:pointer}
+tr.click:hover td{background:var(--sunken)}
+td.name button{border:0;background:none;padding:0;font:inherit;font-weight:500;color:var(--ink);text-align:left;cursor:pointer;text-decoration:underline;text-decoration-color:var(--axis);text-underline-offset:3px}
+.cell{display:block;border-radius:4px;padding:3px 6px;background:var(--cellbg,transparent);white-space:nowrap}
+.cell.s-good{--cellbg:color-mix(in srgb,var(--good) 20%,transparent)}
+.cell.s-warn{--cellbg:color-mix(in srgb,var(--warn) 30%,transparent)}
+.cell.s-crit{--cellbg:color-mix(in srgb,var(--crit) 18%,transparent)}
+.cell.s-none{color:var(--muted)}
+.bar{min-width:110px;width:18%}
+.extra{color:var(--ink-2);font-size:12px}
+.tag{display:inline-block;border:1px solid var(--axis);border-radius:999px;padding:0 8px;font-size:12px;color:var(--ink-2);white-space:nowrap}
+.tag.fx{border-color:var(--accent);color:var(--accent)}
+.pill{display:inline-flex;gap:6px;align-items:center;font-size:12px;border-radius:999px;padding:2px 10px;background:var(--cellbg,transparent);border:1px solid var(--line);white-space:nowrap}
+.pill.s-good{--cellbg:color-mix(in srgb,var(--good) 18%,transparent)}
+.pill.s-warn{--cellbg:color-mix(in srgb,var(--warn) 28%,transparent)}
+.pill.s-crit{--cellbg:color-mix(in srgb,var(--crit) 16%,transparent)}
+.pills{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+
+/* Matriz de gatillos */
+.gm{min-width:980px}
+.gm th,.gm td{padding:5px 6px}
+.gm td.g{text-align:right;white-space:nowrap}
+.gm td.g button{font:inherit;font-variant-numeric:tabular-nums;border:1px solid transparent;background:none;padding:3px 6px;border-radius:4px;width:100%;text-align:right;color:var(--ink)}
+.gm td.g button:hover{border-color:var(--axis)}
+.gm td.g button.fx{color:var(--accent);font-weight:600}
+.gm td.g button.cur{box-shadow:inset 0 -2px 0 var(--accent)}
+.gm td.g button.empty{color:var(--muted)}
+.gm thead th.cur{color:var(--ink)}
+.seg{display:flex;flex-wrap:wrap;gap:6px}
+.seg button{padding:5px 12px;border-radius:999px}
+.seg button[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:var(--bg)}
+
+/* Editor emergente */
+.pop{position:fixed;inset:0;background:color-mix(in srgb,#000 35%,transparent);display:grid;place-items:center;padding:16px;z-index:20}
+.pop .card{width:min(440px,100%);display:flex;flex-direction:column;gap:12px;box-shadow:0 10px 40px rgba(0,0,0,.25)}
+.form{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px 14px;align-items:end}
+.form label{display:flex;flex-direction:column;gap:4px;font-size:12.5px;color:var(--ink-2);min-width:0}
+input[type=text],input[type=number],input[type=search],input[type=date],input[type=month],textarea{font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--axis);border-radius:4px;padding:6px 9px;min-width:0;width:100%}
+textarea{min-height:110px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.hint{font-size:12px;color:var(--ink-2)}
+.rm{border:0;background:none;color:var(--muted);padding:4px 8px;font-size:17px;line-height:1}
+.rm:hover{color:var(--crit)}
+
+/* Gráfica diaria */
+.chartbox{position:relative}
+svg.ch{display:block;width:100%;height:auto;overflow:visible}
+svg.ch text{fill:var(--muted);font-size:11px;font-family:var(--font)}
+svg.ch .gl{stroke:var(--line)}
+svg.ch .ax{stroke:var(--axis)}
+svg.ch .ln{fill:none;stroke:var(--series);stroke-width:2}
+svg.ch .gR{stroke:var(--crit);stroke-width:1.5;stroke-dasharray:6 4}
+svg.ch .g5{stroke:var(--warn);stroke-width:1.5;stroke-dasharray:3 3}
+svg.ch circle{stroke:var(--surface);stroke-width:1.5}
+.tip{position:absolute;pointer-events:none;background:var(--ink);color:var(--bg);font-size:12px;padding:5px 8px;border-radius:4px;white-space:nowrap;transform:translate(-50%,-115%)}
+
+/* Ajustes de catálogo */
+.cat{min-width:1060px}
+.cat td{padding:4px 5px;vertical-align:top}
+.cat input,.cat select{width:100%;font-size:13px;padding:5px 7px}
+.cat input.n{width:64px;text-align:right}
+.reg td{vertical-align:top}
+.reg .long{min-width:260px;max-width:420px;font-size:13px}
+/* Plan de análisis */
+.plan{min-width:980px}
+.plan td{padding:4px 6px}
+.plan td:nth-child(2){min-width:170px}
+.plan input[type=text],.plan input[type=date]{font-size:13px;padding:5px 7px}
+.plan input.resp{min-width:140px}
+.plan input.nota{min-width:200px}
+.plan tr.done td{color:var(--ink-2)}
+details summary{cursor:pointer;color:var(--accent);font-weight:500;width:max-content}
+/* Estado de la base de datos */
+.dbst{border:0;background:none;padding:0;font:inherit;color:var(--ink-2);text-decoration:underline;text-decoration-color:var(--axis);text-underline-offset:3px}
+.dbst::before{content:"";display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--axis);margin-right:6px;vertical-align:1px}
+.dbst[data-st="ok"]::before{background:var(--good)}
+.dbst[data-st="busy"]::before{background:var(--warn)}
+.dbst[data-st="err"]::before{background:var(--crit)}
+.dbst[data-st="err"]{color:var(--crit)}
+/* Menú de plantillas */
+.menu{position:relative}
+.menu>summary{list-style:none;color:var(--ink);font-weight:400;background:var(--surface);border:1px solid var(--axis);border-radius:var(--r);padding:7px 12px;line-height:1.3}
+.menu>summary::-webkit-details-marker{display:none}
+.menu>summary:hover{border-color:var(--ink-2)}
+.menu .list{position:absolute;right:0;top:calc(100% + 4px);z-index:15;width:min(330px,calc(100vw - 32px));background:var(--surface);border:1px solid var(--line);border-radius:var(--r);box-shadow:0 8px 30px rgba(0,0,0,.18);padding:6px;display:flex;flex-direction:column;gap:2px}
+.menu .list button{border:0;text-align:left;padding:8px 10px;display:flex;flex-direction:column;gap:1px;font-weight:500}
+.menu .list button:hover{background:var(--sunken)}
+.menu .list small{color:var(--ink-2);font-size:12px;font-weight:400}
+.notes{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:22px}
+.notes ul{margin:8px 0 0;padding-left:18px;color:var(--ink-2);display:flex;flex-direction:column;gap:5px;max-width:65ch}
+.notes .card{display:flex;flex-direction:column;gap:4px}
+
+@media (max-width:780px){
+  .wrap{padding-inline:16px}
+  .month{grid-template-columns:1fr}
+  .hero .big{font-size:48px}
+  .tabs button{padding:8px 10px}
+}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <header class="top">
+    <div>
+      <span class="lbl">Herramientas de gestión · CD Bávaro</span>
+      <h1>Gatillos y análisis de anomalías</h1>
+      <p class="sub"><span id="status"></span> · <button type="button" class="dbst" data-act="clave" title="Base de datos compartida · clave de edición"><span id="sync">Base de datos…</span></button></p>
+    </div>
+    <div class="ctrls">
+      <label class="btn pri" for="file">Cargar Excel<input id="file" class="vh" type="file" accept=".xlsx,.xls,.xlsm,.csv" multiple></label>
+      <details class="menu">
+        <summary>Descargar plantillas ▾</summary>
+        <div class="list">
+          <button type="button" data-act="tdatos">Datos diarios (vacía)<small>Para agregar datos y gatillos fijos. No borra nada al cargarla.</small></button>
+          <button type="button" data-act="tplan">Plan de análisis (vacío)<small>Para subir relatos y 5XQ por hacer.</small></button>
+          <button type="button" data-act="tplanmes">Plan de análisis con días por planificar<small>Ya trae los días del mes que estás viendo.</small></button>
+          <button type="button" data-act="texport">Respaldo completo (con tus datos)<small>Indicadores, datos, gatillos fijos y plan. Al cargarlo reemplaza todo.</small></button>
+        </div>
+      </details>
+      <button type="button" id="btnTheme">Tema</button>
+    </div>
+  </header>
+  <div id="flash" aria-live="polite"></div>
+  <nav class="tabs" role="tablist" aria-label="Vista">
+    <button type="button" role="tab" data-view="mes">Mes</button>
+    <button type="button" role="tab" data-view="plan">Plan de análisis</button>
+    <button type="button" role="tab" data-view="gat">Gatillos del año</button>
+    <button type="button" role="tab" data-view="det">Detalle por indicador</button>
+    <button type="button" role="tab" data-view="dat">Datos</button>
+    <button type="button" role="tab" data-view="ind">Indicadores</button>
+    <button type="button" role="tab" data-view="reg">Relatos y 5XQ</button>
+  </nav>
+  <div id="view" class="view"></div>
+</main>
+<div id="pop" class="pop" hidden></div>
+<script>
+'use strict';
+/* ===================== Datos iniciales (migrados del Excel "Herramientas de gestión CD Bavaro") =====================
+   ind:   [Indicador, Área, Unidad, Sentido, k, Meses de historia, Margen 5XQ %, Nombres en Forms, Activo]
+   datos: [Indicador, Fecha, Valor]   (Tiempo en fracción de día, como Excel; Porcentaje en decimal)
+   fijos: [Indicador, Mes, Gatillo]   (de la hoja "2. Indicadores")                                                     */
+var SEED = {"ind":[["TML","Distribución","Tiempo","Mayor peor",2,3,5,"TML; Tiempo medio liberación (TML)","Sí"],["Tiempo en ruta","Distribución","Tiempo","Mayor peor",2,3,5,"Tiempo en ruta; Tiempo Ruta","Sí"],["Tiempo interno","Distribución","Tiempo","Mayor peor",2,3,5,"Tiempo interno","Sí"],["Devolución Hectolitros","Distribución","Porcentaje","Mayor peor",2,3,5,"Devolución Hectolitros; % Devol. HL","Sí"],["Rotura Distribución","Distribución","Número","Mayor peor",2,3,5,"Distribución|Roturas; Rotura distribución; Rotura Distribucion","Sí"],["Rotura Almacén","Almacén","Número","Mayor peor",2,3,5,"Almacén|Roturas; Control|Roturas; Rotura almacén; Rotura Almacen","Sí"],["Diferencia de inventario","Almacén","Número","Menor peor",1,3,5,"Diferencia de Inventario; Exactitud de Inventario; Dif. De inventario","Sí"],["Modulación de la devolución","Distribución","Porcentaje","Menor peor",1,3,5,"Modulacion de la devolucion; Efectividad modulación","Sí"],["Crítica","Distribución","Número","Mayor peor",2,3,5,"Critica; Out of stock","Sí"],["No cargado","Distribución","Número","Mayor peor",2,3,5,"No Cargado; No cargado","Sí"],["Mantenimiento correctivo","Flota","Tiempo","Mayor peor",2,3,5,"Mantenimiento Correctivo; Correctivo en tiempo","Sí"]],"datos":[["TML","2026-06-03",0.044375],["TML","2026-06-04",0.0456828704],["TML","2026-06-06",0.0423611111],["TML","2026-06-10",0.0359259259],["TML","2026-06-15",0.0357523148],["TML","2026-06-16",0.041087963],["TML","2026-06-17",0.0378819444],["TML","2026-06-18",0.0411574074],["TML","2026-06-19",0.0278125],["TML","2026-06-20",0.0259143519],["TML","2026-06-22",0.0321064815],["TML","2026-06-23",0.0413194444],["TML","2026-06-25",0.0386458333],["TML","2026-06-26",0.0416087963],["TML","2026-06-27",0.0277430556],["TML","2026-06-29",0.0357638889],["TML","2026-06-30",0.0342592593],["TML","2026-07-01",0.036875],["TML","2026-07-02",0.0396180556],["TML","2026-07-03",0.0230439815],["TML","2026-07-04",0.0297106481],["TML","2026-07-06",0.025],["TML","2026-07-07",0.0380439815],["TML","2026-07-08",0.0330439815],["TML","2026-07-09",0.0312847222],["TML","2026-07-10",0.0316203704],["TML","2026-07-11",0.0286805556],["TML","2026-07-13",0.0330555556],["TML","2026-07-14",0.0270486111],["TML","2026-07-15",0.0273263889],["TML","2026-07-16",0.0304861111],["TML","2026-07-17",0.0286111111],["TML","2026-07-18",0.0346412037],["TML","2026-07-20",0.0348726852],["TML","2026-07-21",0.0309606481],["TML","2026-07-23",0.0342939815],["TML","2026-07-24",0.0286226852],["TML","2026-07-25",0.0307638889],["TML","2026-07-27",0.0395486111],["TML","2026-07-28",0.0371875],["TML","2026-07-29",0.0271412037],["TML","2026-07-30",0.0293287037],["TML","2026-07-31",0.0229513889],["TML","2026-08-01",0.0283260185],["TML","2026-08-03",0.0405495139],["TML","2026-08-04",0.0398148148],["TML","2026-08-05",0.0330246875],["TML","2026-08-06",0.038073669],["TML","2026-08-07",0.0318497454],["TML","2026-08-08",0.0354828009],["TML","2026-08-10",0.0314078241],["TML","2026-08-11",0.0315972222],["TML","2026-08-12",0.0300245139],["TML","2026-08-13",0.0348875694],["TML","2026-08-14",0.0311507986],["TML","2026-08-15",0.0312865509],["TML","2026-08-17",0.0431944444],["TML","2026-08-18",0.0407828241],["TML","2026-08-19",0.0305555556],["TML","2026-08-20",0.0295965625],["TML","2026-08-22",0.0354166667],["TML","2026-08-24",0.0381283102],["TML","2026-08-25",0.0298958333],["TML","2026-08-26",0.042397662],["TML","2026-08-27",0.0315656597],["TML","2026-08-28",0.0416666667],["TML","2026-08-29",0.0327546296],["TML","2026-08-31",0.0386458333],["Tiempo en ruta","2026-06-02",0.3359490741],["Tiempo en ruta","2026-06-03",0.335],["Tiempo en ruta","2026-06-04",0.3259953704],["Tiempo en ruta","2026-06-06",0.3427893519],["Tiempo en ruta","2026-06-10",0.3417708333],["Tiempo en ruta","2026-06-13",0.3283912037],["Tiempo en ruta","2026-06-15",0.3467361111],["Tiempo en ruta","2026-06-16",0.3516782407],["Tiempo en ruta","2026-06-17",0.3494097222],["Tiempo en ruta","2026-06-18",0.351087963],["Tiempo en ruta","2026-06-19",0.3548958333],["Tiempo en ruta","2026-06-20",0.3258796296],["Tiempo en ruta","2026-06-22",0.3357060185],["Tiempo en ruta","2026-06-23",0.3060763889],["Tiempo en ruta","2026-06-25",0.3393402778],["Tiempo en ruta","2026-06-26",0.3414467593],["Tiempo en ruta","2026-06-27",0.3019328704],["Tiempo en ruta","2026-06-29",0.3251157407],["Tiempo en ruta","2026-06-30",0.3559259259],["Tiempo en ruta","2026-07-01",0.3219212963],["Tiempo en ruta","2026-07-02",0.3519791667],["Tiempo en ruta","2026-07-03",0.3364583333],["Tiempo en ruta","2026-07-04",0.3275462963],["Tiempo en ruta","2026-07-06",0.3325115741],["Tiempo en ruta","2026-07-07",0.3493055556],["Tiempo en ruta","2026-07-08",0.3359606481],["Tiempo en ruta","2026-07-09",0.3346527778],["Tiempo en ruta","2026-07-10",0.3318402778],["Tiempo en ruta","2026-07-11",0.3214467593],["Tiempo en ruta","2026-07-13",0.3187847222],["Tiempo en ruta","2026-07-14",0.3472222222],["Tiempo en ruta","2026-07-15",0.3421759259],["Tiempo en ruta","2026-07-16",0.3444097222],["Tiempo en ruta","2026-07-17",0.3501388889],["Tiempo en ruta","2026-07-18",0.3116782407],["Tiempo en ruta","2026-07-20",0.3194791667],["Tiempo en ruta","2026-07-21",0.3108564815],["Tiempo en ruta","2026-07-23",0.3335416667],["Tiempo en ruta","2026-07-24",0.3420486111],["Tiempo en ruta","2026-07-25",0.3402314815],["Tiempo en ruta","2026-07-27",0.3111458333],["Tiempo en ruta","2026-07-28",0.3037847222],["Tiempo en ruta","2026-07-29",0.3346643519],["Tiempo en ruta","2026-07-30",0.3440856481],["Tiempo en ruta","2026-07-31",0.3577199074],["Tiempo en ruta","2026-08-01",0.2955043866],["Tiempo en ruta","2026-08-03",0.3311594213],["Tiempo en ruta","2026-08-04",0.321593912],["Tiempo en ruta","2026-08-05",0.3373070949],["Tiempo en ruta","2026-08-06",0.3482789815],["Tiempo en ruta","2026-08-07",0.320391412],["Tiempo en ruta","2026-08-08",0.2961970949],["Tiempo en ruta","2026-08-10",0.3357007523],["Tiempo en ruta","2026-08-11",0.3383969907],["Tiempo en ruta","2026-08-12",0.310212419],["Tiempo en ruta","2026-08-13",0.3266865046],["Tiempo en ruta","2026-08-14",0.3175595255],["Tiempo en ruta","2026-08-15",0.3177997106],["Tiempo en ruta","2026-08-17",0.31875],["Tiempo en ruta","2026-08-18",0.303882581],["Tiempo en ruta","2026-08-19",0.3434722222],["Tiempo en ruta","2026-08-20",0.3388227546],["Tiempo en ruta","2026-08-21",0.3583002662],["Tiempo en ruta","2026-08-22",0.3248774537],["Tiempo en ruta","2026-08-24",0.3606812153],["Tiempo en ruta","2026-08-25",0.3409027778],["Tiempo en ruta","2026-08-26",0.3181652083],["Tiempo en ruta","2026-08-27",0.3205808102],["Tiempo en ruta","2026-08-28",0.3236458333],["Tiempo en ruta","2026-08-29",0.3295524653],["Tiempo en ruta","2026-08-31",0.336875],["Tiempo interno","2026-06-13",0.0116550926],["Tiempo interno","2026-06-15",0.0118402778],["Tiempo interno","2026-06-16",0.0119444444],["Tiempo interno","2026-06-17",0.0114583333],["Tiempo interno","2026-06-18",0.0118402778],["Tiempo interno","2026-06-19",0.0114699074],["Tiempo interno","2026-06-20",0.0115509259],["Tiempo interno","2026-06-22",0.0118402778],["Tiempo interno","2026-06-23",0.0118287037],["Tiempo interno","2026-06-25",0.0114583333],["Tiempo interno","2026-06-26",0.0118402778],["Tiempo interno","2026-06-27",0.0116550926],["Tiempo interno","2026-06-29",0.0119444444],["Tiempo interno","2026-06-30",0.0119444444],["Tiempo interno","2026-07-01",0.0114699074],["Tiempo interno","2026-07-02",0.0114583333],["Tiempo interno","2026-07-03",0.0118402778],["Tiempo interno","2026-07-04",0.0116550926],["Tiempo interno","2026-07-06",0.0118402778],["Tiempo interno","2026-07-07",0.0115509259],["Tiempo interno","2026-07-08",0.0115509259],["Tiempo interno","2026-07-09",0.0114583333],["Tiempo interno","2026-07-10",0.0115509259],["Tiempo interno","2026-07-11",0.0117592593],["Tiempo interno","2026-07-13",0.0114583333],["Tiempo interno","2026-07-14",0.0118402778],["Tiempo interno","2026-07-15",0.0118402778],["Tiempo interno","2026-07-16",0.0114699074],["Tiempo interno","2026-07-17",0.0114583333],["Tiempo interno","2026-07-18",0.0117592593],["Tiempo interno","2026-07-20",0.0115509259],["Tiempo interno","2026-07-21",0.0118402778],["Tiempo interno","2026-07-23",0.0118402778],["Tiempo interno","2026-07-24",0.0116550926],["Tiempo interno","2026-07-25",0.0117592593],["Tiempo interno","2026-07-27",0.0118402778],["Tiempo interno","2026-07-28",0.0116550926],["Tiempo interno","2026-07-29",0.0118402778],["Tiempo interno","2026-07-30",0.0114699074],["Tiempo interno","2026-07-31",0.0116550926],["Tiempo interno","2026-08-01",0.0115497106],["Tiempo interno","2026-08-03",0.0118357523],["Tiempo interno","2026-08-04",0.0114748727],["Tiempo interno","2026-08-05",0.0116512384],["Tiempo interno","2026-08-06",0.0118357523],["Tiempo interno","2026-08-07",0.0118371181],["Tiempo interno","2026-08-08",0.0114748727],["Tiempo interno","2026-08-10",0.0118371181],["Tiempo interno","2026-08-11",0.0119502315],["Tiempo interno","2026-08-12",0.0117647106],["Tiempo interno","2026-08-13",0.0114748727],["Tiempo interno","2026-08-14",0.0114748727],["Tiempo interno","2026-08-15",0.0115497106],["Tiempo interno","2026-08-17",0.0114583333],["Tiempo interno","2026-08-18",0.0118371181],["Tiempo interno","2026-08-19",0.0114583333],["Tiempo interno","2026-08-20",0.0114748727],["Tiempo interno","2026-08-21",0.0114748727],["Tiempo interno","2026-08-22",0.0117647106],["Tiempo interno","2026-08-24",0.0114748727],["Tiempo interno","2026-08-25",0.0114583333],["Tiempo interno","2026-08-26",0.0115497106],["Tiempo interno","2026-08-27",0.0118371181],["Tiempo interno","2026-08-28",0.0114583333],["Tiempo interno","2026-08-29",0.0116512384],["Tiempo interno","2026-08-31",0.0114583333],["Devolución Hectolitros","2026-06-01",0.0157584066919559],["Devolución Hectolitros","2026-06-02",0.0169053660372714],["Devolución Hectolitros","2026-06-03",0.0242220542576263],["Devolución Hectolitros","2026-06-04",0.0149460188968311],["Devolución Hectolitros","2026-06-05",0.0197],["Devolución Hectolitros","2026-06-06",0.0248],["Devolución Hectolitros","2026-06-08",0.009],["Devolución Hectolitros","2026-06-09",0.00822342463422982],["Devolución Hectolitros","2026-06-10",0.0253635163698668],["Devolución Hectolitros","2026-06-11",0.0219487755384725],["Devolución Hectolitros","2026-06-12",0.0172121907157049],["Devolución Hectolitros","2026-06-15",0.00684638303989153],["Devolución Hectolitros","2026-06-16",0.0150206213297627],["Devolución Hectolitros","2026-06-17",0.0101754137495898],["Devolución Hectolitros","2026-06-19",0.0274],["Devolución Hectolitros","2026-06-20",0.0269],["Devolución Hectolitros","2026-06-23",0.0151],["Devolución Hectolitros","2026-06-24",0.0138593800472418],["Devolución Hectolitros","2026-06-27",0.01650365462917588],["Devolución Hectolitros","2026-06-29",0.01944112120477921],["Devolución Hectolitros","2026-07-01",0.00708390953722233],["Devolución Hectolitros","2026-07-02",0.0214],["Devolución Hectolitros","2026-07-03",0.0134485540142516],["Devolución Hectolitros","2026-07-04",0.0213201792228511],["Devolución Hectolitros","2026-07-06",0.0113304504479365],["Devolución Hectolitros","2026-07-07",0.0117],["Devolución Hectolitros","2026-07-08",0.0292],["Devolución Hectolitros","2026-07-09",0.0249],["Devolución Hectolitros","2026-07-13",0.01239380396741408],["Devolución Hectolitros","2026-07-14",0.02819881137524486],["Devolución Hectolitros","2026-07-15",0.01853039241713501],["Devolución Hectolitros","2026-07-16",0.01912739377272913],["Devolución Hectolitros","2026-07-17",0.02216164540758291],["Devolución Hectolitros","2026-07-18",0.01656568461067904],["Devolución Hectolitros","2026-07-20",0.02425413689941364],["Devolución Hectolitros","2026-07-22",0.01157056331723964],["Devolución Hectolitros","2026-07-23",0.01993120155858983],["Devolución Hectolitros","2026-07-24",0.01725655075487965],["Devolución Hectolitros","2026-07-25",0.02005617636197267],["Devolución Hectolitros","2026-07-27",0.01226202886495063],["Devolución Hectolitros","2026-07-28",0.0116644286714787],["Devolución Hectolitros","2026-07-29",0.01899285397149355],["Devolución Hectolitros","2026-07-30",0.008218376732374964],["Rotura Distribución","2026-06-01",0.221],["Rotura Distribución","2026-06-05",0.1755],["Rotura Distribución","2026-06-22",0.1235],["Rotura Distribución","2026-06-27",0.2405],["Rotura Distribución","2026-06-29",0.2145],["Rotura Distribución","2026-07-01",0.247],["Rotura Distribución","2026-07-02",0.136],["Rotura Distribución","2026-07-03",0.2015],["Rotura Distribución","2026-07-04",0.039],["Rotura Distribución","2026-07-06",0.013],["Rotura Distribución","2026-07-08",0.052],["Rotura Distribución","2026-07-09",0.1755],["Rotura Distribución","2026-07-11",0.2275],["Rotura Distribución","2026-07-22",0.156],["Rotura Distribución","2026-07-23",0.221],["Rotura Distribución","2026-07-24",0.104],["Rotura Distribución","2026-07-25",0.156],["Rotura Distribución","2026-07-27",0.2535],["Rotura Distribución","2026-08-01",0.221],["Rotura Distribución","2026-08-03",0.2015],["Rotura Distribución","2026-08-04",0.2665],["Rotura Distribución","2026-08-05",0.3965],["Rotura Distribución","2026-08-06",0.4485],["Rotura Distribución","2026-08-07",0.078],["Rotura Distribución","2026-08-08",0.117],["Rotura Distribución","2026-08-10",0.0585],["Rotura Distribución","2026-08-11",0.052],["Rotura Distribución","2026-08-13",0.156],["Rotura Distribución","2026-08-14",0.1885],["Rotura Distribución","2026-08-15",0.2795],["Rotura Distribución","2026-08-17",0.221],["Rotura Distribución","2026-08-18",0.3315],["Rotura Distribución","2026-08-19",0.3055],["Rotura Distribución","2026-08-20",0.195],["Rotura Distribución","2026-08-21",0.0455],["Rotura Distribución","2026-08-22",0.247],["Rotura Distribución","2026-08-24",0.156],["Rotura Distribución","2026-08-25",0.1755],["Rotura Distribución","2026-08-26",0.2795],["Rotura Distribución","2026-08-27",0.0325],["Rotura Distribución","2026-08-28",0.1755],["Rotura Distribución","2026-08-29",0.065],["Rotura Almacén","2026-06-01",0.1235],["Rotura Almacén","2026-06-02",0.09749999999999999],["Rotura Almacén","2026-06-03",0.1105],["Rotura Almacén","2026-06-04",0.143],["Rotura Almacén","2026-06-05",0.117],["Rotura Almacén","2026-06-06",0.091],["Rotura Almacén","2026-06-08",0.078],["Rotura Almacén","2026-06-09",0.208],["Rotura Almacén","2026-06-10",0.182],["Rotura Almacén","2026-06-11",0.143],["Rotura Almacén","2026-06-12",0.156],["Rotura Almacén","2026-06-13",0.1105],["Rotura Almacén","2026-06-15",0.143],["Rotura Almacén","2026-06-16",0.104],["Rotura Almacén","2026-06-17",0.09749999999999999],["Rotura Almacén","2026-06-18",0.117],["Rotura Almacén","2026-06-19",0.104],["Rotura Almacén","2026-06-20",0.117],["Rotura Almacén","2026-06-22",0.09749999999999999],["Rotura Almacén","2026-06-23",0.104],["Rotura Almacén","2026-06-25",0.039],["Rotura Almacén","2026-06-26",0.2015],["Rotura Almacén","2026-06-27",0.1625],["Rotura Almacén","2026-06-29",0.091],["Rotura Almacén","2026-07-01",0.078],["Rotura Almacén","2026-07-02",0.104],["Rotura Almacén","2026-07-06",0.091],["Rotura Almacén","2026-07-07",0.104],["Rotura Almacén","2026-07-09",0.0325],["Rotura Almacén","2026-07-11",0.0715],["Rotura Almacén","2026-07-14",0.156],["Rotura Almacén","2026-07-16",0.0325],["Rotura Almacén","2026-07-29",0.104],["Diferencia de inventario","2026-06-01",3971.44],["Diferencia de inventario","2026-06-03",1353.88],["Diferencia de inventario","2026-06-09",685],["Diferencia de inventario","2026-06-10",1380.21],["Diferencia de inventario","2026-06-22",1575.87],["Diferencia de inventario","2026-06-30",-1767.48],["Diferencia de inventario","2026-07-01",-1200],["Diferencia de inventario","2026-07-02",-1180],["Diferencia de inventario","2026-07-04",-1008.08],["Diferencia de inventario","2026-07-13",4397.42],["Diferencia de inventario","2026-07-15",-2187.22],["Diferencia de inventario","2026-07-17",-2417.59],["Diferencia de inventario","2026-07-21",2823.62],["Diferencia de inventario","2026-07-28",-132.49],["Diferencia de inventario","2026-08-01",-1218.2],["Diferencia de inventario","2026-08-03",91.55],["Diferencia de inventario","2026-08-04",13575.72],["Diferencia de inventario","2026-08-05",-1082.56],["Diferencia de inventario","2026-08-06",460.85],["Diferencia de inventario","2026-08-07",-8177.66],["Diferencia de inventario","2026-08-10",-23624.9],["Diferencia de inventario","2026-08-11",-3158.28],["Diferencia de inventario","2026-08-12",3396.9],["Diferencia de inventario","2026-08-13",5297.58],["Diferencia de inventario","2026-08-14",4980.77],["Diferencia de inventario","2026-08-17",-4380.81],["Diferencia de inventario","2026-08-18",-4962.55],["Diferencia de inventario","2026-08-19",-4402.26],["Diferencia de inventario","2026-08-22",-3976.42],["Diferencia de inventario","2026-08-24",-1746.55],["Diferencia de inventario","2026-08-26",-8323.04],["Modulación de la devolución","2026-03-05",0.67],["Modulación de la devolución","2026-03-11",0.63],["Modulación de la devolución","2026-03-17",0.71],["Modulación de la devolución","2026-03-18",0.64],["Modulación de la devolución","2026-03-20",0.67],["Modulación de la devolución","2026-03-21",0.83],["Modulación de la devolución","2026-03-23",0.85],["Modulación de la devolución","2026-03-24",0.92],["Modulación de la devolución","2026-03-25",0.85],["Modulación de la devolución","2026-04-01",0.85],["Modulación de la devolución","2026-04-02",0.85],["Modulación de la devolución","2026-04-06",0.92],["Modulación de la devolución","2026-04-07",0.92],["Modulación de la devolución","2026-04-09",0.6666666666666666],["Modulación de la devolución","2026-04-10",0.5833333333333334],["Modulación de la devolución","2026-04-11",0.875],["Modulación de la devolución","2026-04-14",0.8],["Modulación de la devolución","2026-04-15",0.77],["Modulación de la devolución","2026-04-16",0.64],["Modulación de la devolución","2026-04-21",0.75],["Modulación de la devolución","2026-05-02",0.6],["Modulación de la devolución","2026-05-05",0.82],["Modulación de la devolución","2026-05-06",0.7],["Modulación de la devolución","2026-05-07",0.63],["Modulación de la devolución","2026-05-08",0.78],["Modulación de la devolución","2026-05-09",0.88],["Modulación de la devolución","2026-05-11",0.62],["Modulación de la devolución","2026-05-12",0.78],["Modulación de la devolución","2026-05-13",0.7],["Modulación de la devolución","2026-05-15",0.68],["Modulación de la devolución","2026-05-16",0.76],["Modulación de la devolución","2026-05-21",0.67],["Modulación de la devolución","2026-05-23",0.79],["Modulación de la devolución","2026-05-26",0.7142857142857143],["Modulación de la devolución","2026-05-27",0.6428571428571429],["Crítica","2026-07-04",57.2775],["Crítica","2026-07-06",88.39519999999995],["Crítica","2026-07-11",106.335285],["Crítica","2026-07-16",78.320795],["Crítica","2026-07-17",64.68950000000002],["No cargado","2026-07-01",3.06643199999999],["No cargado","2026-07-03",13.965234],["No cargado","2026-07-07",0.396],["No cargado","2026-07-10",15.38838],["No cargado","2026-07-11",2.60116],["No cargado","2026-07-13",6.504823000000001],["No cargado","2026-07-14",8.541751],["No cargado","2026-07-15",4.251449999999999],["No cargado","2026-07-17",17.1883],["No cargado","2026-07-21",0.6756],["No cargado","2026-07-22",5.913251000000001],["No cargado","2026-07-23",22.24925299999999],["No cargado","2026-07-24",15.52074],["No cargado","2026-07-27",3.118536],["No cargado","2026-07-28",11.57],["No cargado","2026-07-30",12.01337],["No cargado","2026-08-01",1.6364],["No cargado","2026-08-03",26.2021],["No cargado","2026-08-04",5.250049999999999],["No cargado","2026-08-05",4.394488],["No cargado","2026-08-07",9.469768],["No cargado","2026-08-10",2.839770000000001],["No cargado","2026-08-11",3.60374],["No cargado","2026-08-12",4.049189999999999],["No cargado","2026-08-13",1.17192],["Mantenimiento correctivo","2025-09-01",0.0194444444],["Mantenimiento correctivo","2025-09-02",0.0208333333],["Mantenimiento correctivo","2025-09-03",0.0243055556],["Mantenimiento correctivo","2025-09-04",0.0180555556],["Mantenimiento correctivo","2025-09-05",0.01875],["Mantenimiento correctivo","2025-09-07",0.0138888889],["Mantenimiento correctivo","2025-09-08",0.0173611111],["Mantenimiento correctivo","2025-09-09",0.0222222222],["Mantenimiento correctivo","2025-09-10",0.0201388889],["Mantenimiento correctivo","2025-09-11",0.0166666667],["Mantenimiento correctivo","2025-09-12",0.0180555556],["Mantenimiento correctivo","2025-09-16",0.0138888889],["Mantenimiento correctivo","2025-10-01",0.0180555556],["Mantenimiento correctivo","2025-10-02",0.0194444444],["Mantenimiento correctivo","2025-10-03",0.0208333333],["Mantenimiento correctivo","2025-10-04",0.0152777778],["Mantenimiento correctivo","2025-10-05",0.0166666667],["Mantenimiento correctivo","2025-10-08",0.0145833333],["Mantenimiento correctivo","2025-10-09",0.0173611111],["Mantenimiento correctivo","2025-10-10",0.0138888889],["Mantenimiento correctivo","2025-10-11",0.0125],["Mantenimiento correctivo","2025-10-12",0.0104166667],["Mantenimiento correctivo","2025-10-15",0.0083333333],["Mantenimiento correctivo","2025-10-16",0.0069444444],["Mantenimiento correctivo","2025-11-01",0.0152777778],["Mantenimiento correctivo","2025-11-02",0.0173611111],["Mantenimiento correctivo","2025-11-03",0.0208333333],["Mantenimiento correctivo","2025-11-04",0.0138888889],["Mantenimiento correctivo","2025-11-05",0.0125],["Mantenimiento correctivo","2025-11-09",0.0152777778],["Mantenimiento correctivo","2025-11-12",0.0138888889]],"fijos":[["TML","2026-01",0.0402314815],["TML","2026-02",0.045],["TML","2026-03",0.0429861111],["TML","2026-04",0.0461921296],["TML","2026-05",0.0456712963],["TML","2026-06",0.0483449074],["TML","2026-07",0.0468865741],["TML","2026-08",0.0456712963],["TML","2026-09",0.0449421296],["Tiempo en ruta","2026-01",0.3520949074],["Tiempo en ruta","2026-02",0.3675],["Tiempo en ruta","2026-03",0.3624074074],["Tiempo en ruta","2026-04",0.3646296296],["Tiempo en ruta","2026-05",0.3649421296],["Tiempo en ruta","2026-06",0.3695717593],["Tiempo en ruta","2026-07",0.3681944444],["Tiempo en ruta","2026-08",0.3653356481],["Tiempo en ruta","2026-09",0.3630787037],["Tiempo interno","2026-01",0.0333680556],["Tiempo interno","2026-02",0.0342013889],["Tiempo interno","2026-03",0.0337962963],["Tiempo interno","2026-04",0.0366435185],["Tiempo interno","2026-05",0.0365277778],["Tiempo interno","2026-06",0.0292708333],["Tiempo interno","2026-07",0.022337963],["Tiempo interno","2026-08",0.0192361111],["Tiempo interno","2026-09",0.0120023148],["Devolución Hectolitros","2026-01",0.033],["Devolución Hectolitros","2026-02",0.0412],["Devolución Hectolitros","2026-03",0.0385],["Devolución Hectolitros","2026-04",0.0373],["Devolución Hectolitros","2026-05",0.0355],["Devolución Hectolitros","2026-06",0.04099999999999999],["Devolución Hectolitros","2026-07",0.0312],["Devolución Hectolitros","2026-08",0.0304],["Devolución Hectolitros","2026-09",0.0297],["Rotura Distribución","2026-01",25.95],["Rotura Distribución","2026-02",73.957],["Rotura Distribución","2026-03",72.671],["Rotura Distribución","2026-04",64.833],["Rotura Distribución","2026-05",55.84],["Rotura Distribución","2026-06",22.095],["Rotura Distribución","2026-07",0.1755],["Rotura Distribución","2026-08",0.297],["Rotura Distribución","2026-09",0.377],["Rotura Almacén","2026-01",11],["Rotura Almacén","2026-02",35.407],["Rotura Almacén","2026-03",19.99],["Rotura Almacén","2026-04",54.525],["Rotura Almacén","2026-05",42.195],["Rotura Almacén","2026-06",17.409],["Rotura Almacén","2026-07",0.156],["Rotura Almacén","2026-08",0.195],["Rotura Almacén","2026-09",0.196],["Diferencia de inventario","2026-01",36675.043],["Diferencia de inventario","2026-02",11038.805],["Diferencia de inventario","2026-03",7898.518],["Diferencia de inventario","2026-04",4189.011],["Diferencia de inventario","2026-05",3100.554],["Diferencia de inventario","2026-06",1398.553],["Diferencia de inventario","2026-07",1134],["Diferencia de inventario","2026-08",1778.904],["Diferencia de inventario","2026-09",-6982.948],["Modulación de la devolución","2026-01",0.7622],["Modulación de la devolución","2026-02",0.6506000000000001],["Modulación de la devolución","2026-03",0.6506000000000001],["Modulación de la devolución","2026-04",0.4609],["Modulación de la devolución","2026-05",0.6014],["Modulación de la devolución","2026-06",0.6464],["Modulación de la devolución","2026-07",0.6578],["Crítica","2026-02",0.0338],["Crítica","2026-03",0.0434],["Crítica","2026-04",0.0558],["Crítica","2026-05",0.05309999999999999],["Crítica","2026-06",0.0613],["Crítica","2026-07",25.34],["Crítica","2026-08",27.86],["Crítica","2026-09",117.896],["No cargado","2026-02",0.0389],["No cargado","2026-03",0.0412],["No cargado","2026-04",0.046],["No cargado","2026-05",0.0409],["No cargado","2026-06",0.04969999999999999],["No cargado","2026-07",17.21],["No cargado","2026-08",21.315],["No cargado","2026-09",22.06],["Mantenimiento correctivo","2026-01",0.0236111111],["Mantenimiento correctivo","2026-02",0.0222222222],["Mantenimiento correctivo","2026-03",0.0229166667],["Mantenimiento correctivo","2026-04",0.0208333333],["Mantenimiento correctivo","2026-05",0.0236111111],["Mantenimiento correctivo","2026-06",0.0229166667],["Mantenimiento correctivo","2026-07",0.0222222222],["Mantenimiento correctivo","2026-08",0.0215277778],["Mantenimiento correctivo","2026-09",0.0223263889]]};
+
+var KEY='gatillos-bvr-v1', KEYUI='gatillos-bvr-ui';
+var MESES=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+var MES3=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+var UNIDADES=['Tiempo','Porcentaje','Número'], SENTIDOS=['Mayor peor','Menor peor'], AREAS=['Distribución','Almacén','Flota','Control','Otra'];
+var S, UI={view:'mes', mes:null, anio:null, ind:null, gtipo:'R', datInd:'', datMes:'', regTipo:'', regInd:'', regQ:'', planVer:'mes', ppResp:'', ppLim:''};
+var $=function(id){return document.getElementById(id);};
+
+/* ---------------- utilidades ---------------- */
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+function norm(s){return String(s==null?'':s).normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/\s+/g,' ').trim();}
+function pad(n){return (n<10?'0':'')+n;}
+function ymd(d){return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());}
+function hoyMes(){var d=new Date();return d.getFullYear()+'-'+pad(d.getMonth()+1);}
+function addMes(m,k){var y=+m.slice(0,4),mm=+m.slice(5,7)-1+k;y+=Math.floor(mm/12);mm=((mm%12)+12)%12;return y+'-'+pad(mm+1);}
+function mesNombre(m){return MESES[+m.slice(5,7)-1]+' '+m.slice(0,4);}
+function diasMes(m){return new Date(+m.slice(0,4),+m.slice(5,7),0).getDate();}
+function addDias(f,k){var d=new Date(+f.slice(0,4),+f.slice(5,7)-1,+f.slice(8,10)+k);return ymd(d);}
+function fechaCorta(f){return +f.slice(8,10)+' '+MES3[+f.slice(5,7)-1].toLowerCase();}
+function uid(){return 'i'+Math.random().toString(36).slice(2,9);}
+function pctTxt(p){return p==null?'—':Math.round(p*100)+'%';}
+
+function fmt(v,u){
+  if(v==null||isNaN(v)) return '—';
+  if(u==='Tiempo'){var neg=v<0,s=Math.round(Math.abs(v)*86400),h=Math.floor(s/3600),m=Math.floor(s%3600/60),ss=s%60;return (neg?'-':'')+h+':'+pad(m)+':'+pad(ss);}
+  if(u==='Porcentaje') return (v*100).toLocaleString('es-DO',{minimumFractionDigits:2,maximumFractionDigits:2})+'%';
+  var a=Math.abs(v);return v.toLocaleString('es-DO',{maximumFractionDigits:a>=1000?0:a>=10?2:3});
+}
+/* Convierte texto o número a la unidad interna. Tiempo: fracción de día. Porcentaje: decimal. */
+function parseVal(x,u){
+  if(x==null||x==='') return null;
+  if(x instanceof Date){ if(u==='Tiempo'){return (x.getHours()*3600+x.getMinutes()*60+x.getSeconds())/86400;} return null; }
+  if(typeof x==='number') return (u==='Porcentaje'&&Math.abs(x)>1.5)?x/100:x;
+  var s=String(x).trim().replace(/\s/g,''); if(!s) return null;
+  if(u==='Tiempo'||/^-?\d+:\d/.test(s)){
+    var neg=s[0]==='-'; if(neg) s=s.slice(1);
+    var p=s.split(':').map(Number); if(p.some(isNaN)) return null;
+    while(p.length<3) p.push(0);
+    var r=(p[0]*3600+p[1]*60+p[2])/86400; return neg?-r:r;
+  }
+  var pc=/%$/.test(s); s=s.replace('%','');
+  if(/^-?\d{1,3}(\.\d{3})+,\d+$/.test(s)) s=s.replace(/\./g,'').replace(',','.');
+  else if(/^-?\d+,\d+$/.test(s)) s=s.replace(',','.');
+  else s=s.replace(/,/g,'');
+  var n=Number(s); if(isNaN(n)) return null;
+  if(pc) return n/100;
+  if(u==='Porcentaje'&&Math.abs(n)>1.5) return n/100;
+  return n;
+}
+/* Fechas: Date, número de serie de Excel o texto (AAAA-MM-DD, D/M/AAAA). */
+function parseFecha(x){
+  if(x==null||x==='') return null;
+  if(x instanceof Date){ if(isNaN(x)) return null; var d=new Date(x.getTime()+ (x.getHours()>=23?3600000:0)); return ymd(d); }
+  if(typeof x==='number'){ if(x<20000||x>80000) return null; var d2=new Date(Math.round((x-25569)*86400000)); return d2.getUTCFullYear()+'-'+pad(d2.getUTCMonth()+1)+'-'+pad(d2.getUTCDate()); }
+  var s=String(x).trim(), m;
+  if((m=s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/))) return m[1]+'-'+pad(+m[2])+'-'+pad(+m[3]);
+  if((m=s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})/))){
+    var a=+m[1],b=+m[2],y=+m[3]; if(y<100) y+=2000;
+    var dd=a,mm=b; if(b>12&&a<=12){dd=b;mm=a;}
+    if(mm<1||mm>12||dd<1||dd>31) return null;
+    return y+'-'+pad(mm)+'-'+pad(dd);
+  }
+  return null;
+}
+function mean(a){var s=0;for(var i=0;i<a.length;i++)s+=a[i];return s/a.length;}
+function stdev(a){if(a.length<2)return NaN;var m=mean(a),s=0;for(var i=0;i<a.length;i++)s+=(a[i]-m)*(a[i]-m);return Math.sqrt(s/(a.length-1));}
+
+/* ---------------- estado ---------------- */
+function nuevoInd(r){
+  return {id:uid(), nombre:String(r[0]||'').trim(), area:r[1]||'Distribución', unidad:UNIDADES.indexOf(r[2])>=0?r[2]:'Número',
+    sentido:SENTIDOS.indexOf(r[3])>=0?r[3]:'Mayor peor', k:r[4]===''||r[4]==null||isNaN(+r[4])?2:+r[4],
+    meses:r[5]===''||r[5]==null||isNaN(+r[5])?3:Math.max(1,Math.round(+r[5])), margen:r[6]===''||r[6]==null||isNaN(+r[6])?5:+r[6],
+    alias:String(r[7]||'').split(/[;\n]/).map(function(s){return s.trim();}).filter(Boolean), activo:!/^no$/i.test(String(r[8]||'Sí').trim())};
+}
+function desdeSeed(){
+  var st={v:1, ind:[], datos:{}, fijos:{}, reg:[], regMeta:{}, plan:[], cfg:{tol:1}};
+  if(!SEED) return st;
+  SEED.ind.forEach(function(r){st.ind.push(nuevoInd(r));});
+  var byN={}; st.ind.forEach(function(i){byN[i.nombre]=i.id;});
+  SEED.datos.forEach(function(r){var id=byN[r[0]]; if(!id) return; (st.datos[id]=st.datos[id]||{})[r[1]]={v:r[2],o:'x'};});
+  SEED.fijos.forEach(function(r){var id=byN[r[0]]; if(!id) return; (st.fijos[id]=st.fijos[id]||{})[r[1]]=r[2];});
+  return st;
+}
+function cargar(){
+  try{var j=JSON.parse(localStorage.getItem(KEY)||'null'); if(j&&j.v===1&&j.ind){S=j; S.cfg=S.cfg||{tol:1}; S.reg=S.reg||[]; S.regMeta=S.regMeta||{}; S.plan=S.plan||[]; return;}}catch(_){}
+  S=desdeSeed();
+}
+/* Guarda un cambio de datos: copia en este navegador y, en un momento, en la base compartida. */
+function guardar(){
+  guardarLocal(); setPend(true);
+  clearTimeout(DB.t); DB.t=setTimeout(sync,700);
+}
+function guardarLocal(){
+  try{localStorage.setItem(KEY,JSON.stringify(S));}
+  catch(e){flash('crit','No se pudo guardar en este navegador (espacio lleno o bloqueado). Los cambios siguen en pantalla; descarga la plantilla para no perderlos.');}
+  guardarUI();
+}
+/* Solo lo que se está viendo (pestaña, indicador): no va a la base. */
+function guardarUI(){
+  try{localStorage.setItem(KEYUI,JSON.stringify({view:UI.view,ind:UI.ind,gtipo:UI.gtipo}));}catch(_){}
+  status();
+}
+
+/* ---------------- base de datos compartida (Cloudflare Worker + D1) ----------------
+   La página trabaja con S en memoria. Después de cada cambio, sync() compara S con la última versión que está en la base
+   (DB.snap) y manda solo lo que cambió. Al abrir, pull() trae la base; si este navegador tenía cambios sin subir, se suben.
+   Leer y guardar son libres. Si se configura la clave en el Worker (EDIT_KEY), la página la pide una vez y el navegador la recuerda.
+   En pruebas locales se puede apuntar a otro Worker con ?api=http://localhost:8787 */
+var API=(/^(localhost|127\.0\.0\.1)$/.test(location.hostname)&&new URLSearchParams(location.search).get('api'))||'https://gatillos-api.japf20092004.workers.dev';
+var KEYK='gatillos-bvr-clave', KEYP='gatillos-bvr-pend', DB={ready:false, snap:null, busy:false, again:false, noKey:false, pidio:false, t:null};
+function getClave(){try{return localStorage.getItem(KEYK)||'';}catch(_){return '';}}
+function setClave(k){try{if(k)localStorage.setItem(KEYK,k);else localStorage.removeItem(KEYK);}catch(_){}}
+function getPend(){try{return localStorage.getItem(KEYP)==='1';}catch(_){return false;}}
+function setPend(on){try{if(on)localStorage.setItem(KEYP,'1');else localStorage.removeItem(KEYP);}catch(_){}}
+function api(method,path,body){
+  var h={'Content-Type':'application/json'}; if(method!=='GET') h['X-Clave']=getClave();
+  return fetch(API+path,{method:method,headers:h,body:body===undefined?undefined:JSON.stringify(body)})
+    .then(function(r){ if(!r.ok){var e=new Error('HTTP '+r.status); e.status=r.status; throw e;} return r.json(); });
+}
+function setSync(st,txt){var e=$('sync'); if(e){e.textContent=txt; e.parentNode.dataset.st=st;}}
+function planLimpio(x){return {id:x.id,ind:x.ind,indN:x.indN||'',f:x.f,t:x.t,resp:x.resp||'',lim:x.lim||'',nota:x.nota||'',hecho:!!x.hecho};}
+function regLimpio(r){var o={}; for(var k in r) if(k.charAt(0)!=='_') o[k]=r[k]; return o;}
+/* Lo que se compara con la base: textos por sección, y por fila en datos y plan. */
+function foto(s){
+  var d={}, p={};
+  for(var id in s.datos) for(var f in s.datos[id]) d[id+'|'+f]=s.datos[id][f].v+'|'+(s.datos[id][f].o||'');
+  s.plan.forEach(function(x){p[x.id]=JSON.stringify(planLimpio(x));});
+  return {ind:JSON.stringify(s.ind), fijos:JSON.stringify(s.fijos), cfg:JSON.stringify(s.cfg), regMeta:JSON.stringify(s.regMeta),
+    R:JSON.stringify((s.regMeta||{}).R||null), '5':JSON.stringify((s.regMeta||{})['5']||null), d:d, p:p};
+}
+function trozos(a,n){var o=[]; for(var i=0;i<a.length;i+=n) o.push(a.slice(i,i+n)); return o;}
+function sync(){
+  if(!DB.ready||DB.noKey) return;
+  if(DB.busy){DB.again=true; return;}
+  var now=foto(S), old=DB.snap, jobs=[];
+  ['ind','fijos','cfg','regMeta'].forEach(function(k){ if(now[k]!==old[k]) jobs.push(['PUT','/api/config/'+k,JSON.parse(now[k])]); });
+  ['R','5'].forEach(function(t){ if(now[t]!==old[t]){
+    var rows=S.reg.filter(function(r){return r.t===t;}).map(regLimpio), ps=trozos(rows,800); if(!ps.length) ps=[[]];
+    ps.forEach(function(part,i){ jobs.push(['POST','/api/regs/'+t,{rows:part,first:i===0}]); });
+  } });
+  var put=[], del=[], k;
+  for(k in now.d) if(now.d[k]!==old.d[k]){var a=k.split('|'), x=S.datos[a[0]][a[1]]; put.push([a[0],a[1],x.v,x.o||'']);}
+  for(k in old.d) if(!(k in now.d)) del.push(k.split('|'));
+  trozos(put,300).forEach(function(c){jobs.push(['POST','/api/datos',{put:c}]);});
+  trozos(del,60).forEach(function(c){jobs.push(['POST','/api/datos',{del:c}]);});
+  var pp=[], pd=[];
+  for(k in now.p) if(now.p[k]!==old.p[k]) pp.push(JSON.parse(now.p[k]));
+  for(k in old.p) if(!(k in now.p)) pd.push(k);
+  trozos(pp,200).forEach(function(c){jobs.push(['POST','/api/plan',{put:c}]);});
+  trozos(pd,90).forEach(function(c){jobs.push(['POST','/api/plan',{del:c}]);});
+  if(!jobs.length){ setPend(false); setSync('ok','Guardado en la base'); return; }
+  DB.busy=true; setSync('busy','Guardando en la base…');
+  var i=0;
+  (function next(){
+    if(i>=jobs.length){ DB.snap=now; DB.busy=false; if(DB.again){DB.again=false; sync();} else {setPend(false); setSync('ok','Guardado en la base');} return; }
+    var j=jobs[i++]; api(j[0],j[1],j[2]).then(next).catch(function(e){
+      DB.busy=false; DB.again=false;
+      if(e.status===401){ DB.noKey=true; setSync('err','No se guardó: falta la clave (toca aquí)'); if(!DB.pidio){DB.pidio=true; abrirClave();} }
+      else { setSync('err','No se pudo guardar en la base · se reintenta'); clearTimeout(DB.t); DB.t=setTimeout(sync,20000); }
+    });
+  })();
+}
+function pull(){
+  setSync('busy','Conectando con la base…');
+  api('GET','/api/state').then(function(st){
+    var c=st.config||{};
+    var sdb={v:1, ind:c.ind||[], fijos:c.fijos||{}, cfg:c.cfg||{tol:1}, regMeta:c.regMeta||{}, reg:st.reg||[], plan:st.plan||[], datos:{}};
+    (st.datos||[]).forEach(function(r){(sdb.datos[r[0]]=sdb.datos[r[0]]||{})[r[1]]={v:r[2],o:r[3]||''};});
+    DB.snap=foto(sdb); DB.ready=true;
+    if(!c.ind){ setSync('busy','Subiendo los datos a la base…'); sync(); return; }   // base vacía: se sube lo de este navegador
+    if(getPend()){ sync(); return; }                                                    // cambios de este navegador sin subir
+    S=sdb; invalidar(); guardarLocal(); render(); setSync('ok','Conectado a la base');
+  }).catch(function(){ setSync('err','Sin conexión con la base · los cambios quedan en este navegador'); });
+}
+function abrirClave(){
+  $('pop').innerHTML='<div class="card" role="dialog" aria-modal="true" aria-labelledby="popt"><div><span class="lbl">Base de datos</span><h2 id="popt">Clave de edición</h2></div>'+
+    '<p class="sub">Para guardar en la base compartida hace falta la clave. Se recuerda en este navegador.</p>'+
+    '<label class="form" style="grid-template-columns:1fr"><label>Clave<input type="password" id="kin" autocomplete="off" value=""></label></label>'+
+    '<div class="row" style="justify-content:flex-end">'+(getClave()?'<button type="button" data-act="kolvidar">Olvidar clave</button>':'')+'<button type="button" data-act="popx">Cancelar</button><button type="button" class="pri" data-act="kok">Guardar</button></div></div>';
+  $('pop').hidden=false; setTimeout(function(){var x=$('kin'); if(x) x.focus();},0);
+}
+function indById(id){for(var i=0;i<S.ind.length;i++) if(S.ind[i].id===id) return S.ind[i]; return null;}
+function activos(){return S.ind.filter(function(i){return i.activo;});}
+
+/* ---------------- gatillos ---------------- */
+/* Igual que las hojas mensuales del Excel: promedio ± k × desviación estándar (muestra) de los meses de historia.
+   Mayor peor suma; Menor peor resta. Un gatillo fijo (escrito a mano) manda sobre el cálculo. */
+var GC={};
+function gatillo(ind,mes){
+  var key=ind.id+'|'+mes; if(GC[key]) return GC[key];
+  var desde=addMes(mes,-ind.meses)+'-01', hasta=addMes(mes,-1)+'-'+pad(diasMes(addMes(mes,-1)));
+  var vals=[], dd=S.datos[ind.id]||{}, meses={};
+  for(var f in dd){ if(f>=desde&&f<=hasta&&dd[f].v!=null){vals.push(dd[f].v); meses[f.slice(0,7)]=1;} }
+  var r={desde:desde,hasta:hasta,n:vals.length,mesesCon:Object.keys(meses).length,prom:vals.length?mean(vals):null,sd:stdev(vals),calc:null,v:null,fuente:null};
+  if(vals.length>=2&&!isNaN(r.sd)) r.calc= ind.sentido==='Mayor peor' ? r.prom+ind.k*r.sd : r.prom-ind.k*r.sd;
+  var fx=(S.fijos[ind.id]||{})[mes];
+  if(fx!=null){r.v=fx;r.fuente='fijo';} else if(r.calc!=null){r.v=r.calc;r.fuente='calc';}
+  r.v5 = r.v==null?null : (ind.sentido==='Mayor peor' ? r.v-Math.abs(r.v)*ind.margen/100 : r.v+Math.abs(r.v)*ind.margen/100);
+  GC[key]=r; return r;
+}
+function nivel(ind,v,g){
+  if(v==null||g.v==null) return '';
+  if(ind.sentido==='Mayor peor'){ if(v>g.v) return 'R'; if(v>g.v5) return '5'; }
+  else { if(v<g.v) return 'R'; if(v<g.v5) return '5'; }
+  return 'ok';
+}
+
+/* ---------------- registros de los Forms ---------------- */
+function aliasSet(ind){
+  var a={}, pl={}; a[norm(ind.nombre)]=1;
+  ind.alias.forEach(function(s){ if(s.indexOf('|')>=0) pl[norm(s)]=1; else a[norm(s)]=1; });
+  return {plain:a, area:pl};
+}
+var RC=null;
+function regIndex(){
+  if(RC) return RC;
+  RC={porInd:{}, sinInd:{}};
+  var sets=S.ind.map(function(i){return [i,aliasSet(i)];});
+  S.reg.forEach(function(r){
+    var n=norm(r.ind), na=norm((r.a||'')+'|'+r.ind), hit=null;
+    for(var j=0;j<sets.length&&!hit;j++) if(sets[j][1].area[na]) hit=sets[j][0];
+    for(j=0;j<sets.length&&!hit;j++) if(sets[j][1].plain[n]) hit=sets[j][0];
+    r._i=hit?hit.id:null;
+    if(hit){ var m=RC.porInd[hit.id]=RC.porInd[hit.id]||{}; (m[r.f]=m[r.f]||[]).push(r); }
+    else { var key=(r.a||'')+'|'+r.ind; RC.sinInd[key]=(RC.sinInd[key]||0)+1; }
+  });
+  return RC;
+}
+function regsDia(ind,f){
+  var m=regIndex().porInd[ind.id]||{}, out=[];
+  for(var k=0;k<=S.cfg.tol;k++){ var d=addDias(f,k); if(m[d]) out=out.concat(m[d]); }
+  return out;
+}
+function invalidar(){GC={};RC=null;}
+
+/* Resumen de un indicador en un mes */
+function resumen(ind,mes){
+  var g=gatillo(ind,mes), dd=S.datos[ind.id]||{}, dias=[], c={dato:0,R:0,c5:0,ok:0,hechoR:0,hecho5:0,pend:0,reg:0};
+  var n=diasMes(mes);
+  for(var d=1;d<=n;d++){
+    var f=mes+'-'+pad(d), x=dd[f], rg=regsDia(ind,f);
+    var v=x?x.v:null, lv=nivel(ind,v,g);
+    if(x) c.dato++;
+    var tieneR=rg.some(function(r){return r.t==='R';}), tiene5=rg.some(function(r){return r.t==='5';});
+    var est='';
+    if(lv==='R'){c.R++; if(tieneR){c.hechoR++;est='hecho';} else {c.pend++;est=tiene5?'parcial':'pend';}}
+    else if(lv==='5'){c.c5++; if(tieneR||tiene5){c.hecho5++;est='hecho';} else {c.pend++;est='pend';}}
+    else if(lv==='ok') c.ok++;
+    if(x||rg.length) dias.push({f:f,v:v,x:x,lv:lv,est:est,rg:rg});
+  }
+  // registros del mes de este indicador (aunque no haya dato del día)
+  var m=regIndex().porInd[ind.id]||{}; for(var f2 in m) if(f2.slice(0,7)===mes) c.reg+=m[f2].length;
+  c.disp=c.R+c.c5; c.hecho=c.hechoR+c.hecho5; c.adh=c.disp?c.hecho/c.disp:null;
+  return {g:g,dias:dias,c:c};
+}
+function stAdh(p){return p==null?'none':p>=.9?'good':p>=.6?'warn':'crit';}
+
+/* ---------------- lectura de Excel ---------------- */
+function leerArchivo(file){
+  return new Promise(function(res,rej){
+    var fr=new FileReader();
+    fr.onload=function(){ try{ res(XLSX.read(new Uint8Array(fr.result),{type:'array',cellDates:true})); }catch(e){rej(e);} };
+    fr.onerror=function(){rej(fr.error);};
+    fr.readAsArrayBuffer(file);
+  });
+}
+function filas(ws){return XLSX.utils.sheet_to_json(ws,{header:1,raw:true,defval:null,blankrows:false});}
+function hoja(wb,nombre){var n=norm(nombre);for(var i=0;i<wb.SheetNames.length;i++) if(norm(wb.SheetNames[i])===n) return wb.Sheets[wb.SheetNames[i]];return null;}
+
+async function procesar(files){
+  var msgs=[], errs=[];
+  for(var i=0;i<files.length;i++){
+    var f=files[i];
+    try{
+      var wb=await leerArchivo(f);
+      if(hoja(wb,'Indicadores')||hoja(wb,'Datos')||hoja(wb,'Gatillos fijos')||hoja(wb,'Plan')) msgs.push(cargarPlantilla(wb,f.name));
+      else { var r=cargarForms(wb,f.name); if(r.err) errs.push(r.err); else msgs.push(r.msg); }
+    }catch(e){ errs.push(f.name+': no se pudo leer ('+(e&&e.message||e)+').'); }
+  }
+  invalidar(); guardar(); render();
+  if(errs.length) flash('crit','<b>Revisa:</b><ul>'+errs.map(function(e){return '<li>'+esc(e)+'</li>';}).join('')+'</ul>'+(msgs.length?'<p>'+msgs.map(esc).join('<br>')+'</p>':''),true);
+  else if(msgs.length) flash('ok',msgs.map(esc).join('<br>'),true);
+}
+
+/* Plantilla: si trae "Indicadores" reemplaza todo (catálogo, datos, gatillos fijos y plan). Si solo trae "Datos" o "Plan", los agrega. */
+function cargarPlantilla(wb,nombre){
+  var wsI=hoja(wb,'Indicadores'), wsD=hoja(wb,'Datos'), wsF=hoja(wb,'Gatillos fijos'), wsP=hoja(wb,'Plan'), partes=[], omit=0;
+  if(wsI){
+    var rows=filas(wsI), h=rows.shift()||[], cat=[];
+    rows.forEach(function(r){ if(r[0]!=null&&String(r[0]).trim()) cat.push(nuevoInd(r)); });
+    // conservar ids de indicadores que ya existen (para no perder datos escritos a mano si no vienen en "Datos")
+    var viejos={}; S.ind.forEach(function(i){viejos[norm(i.nombre)]=i.id;});
+    cat.forEach(function(i){ if(viejos[norm(i.nombre)]) i.id=viejos[norm(i.nombre)]; });
+    S.ind=cat; partes.push(cat.length+' indicadores');
+  }
+  var byN={}; S.ind.forEach(function(i){byN[norm(i.nombre)]=i;});
+  if(wsD){
+    var nuevos={}, n=0, sinInd={};
+    filas(wsD).slice(1).forEach(function(r){
+      var ind=byN[norm(r[0])]; if(!ind){ if(r[0]!=null&&String(r[0]).trim()) sinInd[r[0]]=1; return; }
+      var fe=parseFecha(r[1]), v=parseVal(r[2],ind.unidad); if(!fe||v==null){omit++;return;}
+      var o=/excel anterior/i.test(String(r[3]||''))?'x':'p';
+      (nuevos[ind.id]=nuevos[ind.id]||{})[fe]={v:v,o:o}; n++;
+    });
+    if(wsI) S.datos=nuevos;
+    else for(var id in nuevos){ S.datos[id]=S.datos[id]||{}; for(var fe in nuevos[id]) S.datos[id][fe]=nuevos[id][fe]; }
+    partes.push(n+' datos'+(wsI?'':' agregados'));
+    var si=Object.keys(sinInd); if(si.length) partes.push('se ignoraron datos de indicadores que no están en el catálogo: '+si.join(', '));
+  }
+  if(wsF){
+    var fx={}, k=0;
+    filas(wsF).slice(1).forEach(function(r){
+      var ind=byN[norm(r[0])]; if(!ind) return;
+      var m=r[1] instanceof Date ? r[1].getFullYear()+'-'+pad(r[1].getMonth()+1) : String(r[1]||'').trim().replace(/^(\d{4})[\/-](\d{1,2}).*$/,function(_,y,mm){return y+'-'+pad(+mm);});
+      if(!/^\d{4}-\d{2}$/.test(m)){omit++;return;}
+      var v=parseVal(r[2],ind.unidad); if(v==null){omit++;return;}
+      (fx[ind.id]=fx[ind.id]||{})[m]=v; k++;
+    });
+    if(wsI) S.fijos=fx; else for(var id2 in fx){S.fijos[id2]=S.fijos[id2]||{}; for(var m2 in fx[id2]) S.fijos[id2][m2]=fx[id2][m2];}
+    partes.push(k+' gatillos fijos');
+  }
+  if(wsP){
+    var pl=[], sinP={};
+    filas(wsP).slice(1).forEach(function(r){
+      if(r[0]==null||!String(r[0]).trim()) return;
+      var ind=byN[norm(r[0])], fe=parseFecha(r[1]);
+      if(!ind){ sinP[r[0]]=1; return; }
+      if(!fe){ omit++; return; }
+      var p=nuevoPlan(ind.id,fe,/5/.test(String(r[2]||''))?'5':'R',String(r[3]||'').trim(),parseFecha(r[4])||'',String(r[5]||'').trim());
+      p.hecho=/^s[ií]/i.test(String(r[6]||'').trim()); pl.push(p);
+    });
+    if(wsI){ S.plan=pl; partes.push(pl.length+' análisis en el plan'); }
+    else {
+      var nn=0, na=0;
+      pl.forEach(function(p){
+        var ex=S.plan.filter(function(q){return q.ind===p.ind&&q.f===p.f&&q.t===p.t;})[0];
+        if(!ex){ S.plan.push(p); nn++; return; }
+        if(p.resp) ex.resp=p.resp; if(p.lim) ex.lim=p.lim; if(p.nota) ex.nota=p.nota; if(p.hecho) ex.hecho=true; na++;
+      });
+      partes.push(nn+' análisis agregados al plan'+(na?' · '+na+' actualizados':''));
+    }
+    var sp=Object.keys(sinP); if(sp.length) partes.push('se ignoraron filas del plan con indicadores que no están en el catálogo: '+sp.join(', '));
+  }
+  if(omit) partes.push(omit+' filas sin fecha o valor válido se omitieron');
+  return nombre+': '+partes.join(' · ')+'.';
+}
+
+/* Exportación de Microsoft Forms (Relatos de Anomalía o 5XQ). Reemplaza los registros de ese tipo. */
+function cargarForms(wb,nombre){
+  var best=null;
+  wb.SheetNames.forEach(function(sn){
+    var rows=filas(wb.Sheets[sn]);
+    for(var i=0;i<Math.min(12,rows.length);i++){
+      var h=(rows[i]||[]).map(norm);
+      if(h.some(function(x){return x.indexOf('indicador')>=0;}) && h.filter(Boolean).length>=5){ if(!best||rows.length>best.rows.length) best={sn:sn,rows:rows,hi:i}; break; }
+    }
+  });
+  if(!best) return {err:nombre+': no parece una exportación de Relatos o 5XQ (no encontré la columna "Indicador"). Si es la plantilla, debe tener las hojas "Indicadores" y "Datos".'};
+  var H=best.rows[best.hi].map(norm), col=function(fn){for(var i=0;i<H.length;i++) if(H[i]&&fn(H[i])) return i; return -1;};
+  var cols=function(fn){var o=[];for(var i=0;i<H.length;i++) if(H[i]&&fn(H[i])) o.push(i);return o;};
+  var C={
+    fecha:col(function(h){return h==='fecha'||h==='fecha ';}),
+    fecha2:col(function(h){return /^fecha/.test(h)&&!/plan|realizacion|creacion/.test(h);}),
+    fin:col(function(h){return /completion time|hora de finalizacion/.test(h);}),
+    centro:col(function(h){return h==='cdd'||/^centro|^cd$|agencia/.test(h);}),
+    area:col(function(h){return /^area/.test(h);}),
+    ind:cols(function(h){return h.indexOf('indicador')>=0;}),
+    resp:cols(function(h){return /responsable|supervisor|conferente/.test(h);}),
+    chofer:col(function(h){return /chofer|nombre del funcionario/.test(h)||h==='nombre';}),
+    ruta:col(function(h){return /^ruta/.test(h);}),
+    res:col(function(h){return /^resultado/.test(h)&&!/ruta/.test(h);}),
+    resRuta:col(function(h){return /^resultado ruta/.test(h);}),
+    pq:cols(function(h){return /por ?que/.test(h);}),
+    causa:col(function(h){return /causa/.test(h);}),
+    acc:col(function(h){return /accion/.test(h)&&!/safety/.test(h);}),
+    cron:col(function(h){return /cronica/.test(h);})
+  };
+  if(C.fecha<0) C.fecha=C.fecha2>=0?C.fecha2:C.fin;
+  var es5 = /5\s*x\s*q|5xq|5 porq|5 why/i.test(nombre+' '+best.sn) || H.some(function(h){return /supervisor de turno|conferente|^chofer/.test(h);});
+  var t=es5?'5':'R', out=[], otros=0, sinF=0;
+  best.rows.slice(best.hi+1).forEach(function(r){
+    var g=function(i){return i>=0&&r[i]!=null?String(r[i]).trim():'';};
+    var ind=''; for(var j=0;j<C.ind.length&&!ind;j++) ind=g(C.ind[j]);
+    if(!ind||ind==='*') return;
+    var cen=g(C.centro); if(cen&&!/bavaro/.test(norm(cen))){otros++;return;}
+    var fe=parseFecha(C.fecha>=0?r[C.fecha]:null)||parseFecha(C.fin>=0?r[C.fin]:null); if(!fe){sinF++;return;}
+    var resp=''; for(j=0;j<C.resp.length&&!resp;j++) resp=g(C.resp[j]);
+    var pq=C.pq.map(function(i){return g(i);}).filter(Boolean);
+    if(pq.length&&pq.every(function(p){return /^prueba$/i.test(p);})) return;
+    out.push({t:t,f:fe,a:g(C.area),ind:ind,resp:resp,chofer:g(C.chofer),ruta:g(C.ruta),res:g(C.res)||g(C.resRuta),
+      pq1:(pq[0]||'').slice(0,240),causa:g(C.causa).slice(0,400),acc:g(C.acc).slice(0,400),cron:/^s/i.test(g(C.cron))?'Sí':g(C.cron)?'No':''});
+  });
+  if(!out.length) return {err:nombre+': no encontré registros de Bávaro con fecha e indicador'+(otros?' ('+otros+' eran de otros centros)':'')+'.'};
+  S.reg=S.reg.filter(function(x){return x.t!==t;}).concat(out);
+  var fs=out.map(function(x){return x.f;}).sort();
+  S.regMeta[t]={archivo:nombre,cargado:ymd(new Date()),n:out.length,desde:fs[0],hasta:fs[fs.length-1]};
+  return {msg:nombre+': '+out.length+' '+(es5?'5XQ':'relatos')+' de Bávaro ('+fechaCorta(fs[0])+' '+fs[0].slice(0,4)+' a '+fechaCorta(fs[fs.length-1])+' '+fs[fs.length-1].slice(0,4)+')'+(otros?' · '+otros+' de otros centros ignorados':'')+(sinF?' · '+sinF+' sin fecha':'')+'. Se reemplazaron los '+(es5?'5XQ':'relatos')+' cargados antes.'};
+}
+
+/* ---------------- exportar plantilla ---------------- */
+/* Plantilla vacía para agregar datos diarios y gatillos fijos. No trae la hoja Indicadores, así que al cargarla agrega sin borrar nada. */
+function plantillaDatos(){
+  var wb=XLSX.utils.book_new();
+  var ins=[['Gatillos CD Bávaro — plantilla para agregar datos diarios'],[''],
+    ['Datos: Indicador, Fecha, Valor. Una fila por día e indicador.'],
+    ['  Indicador: escrito como en la hoja Listas. Fecha: 2026-11-03 o 3/11/2026.'],
+    ['  Valor: tiempo como 1:05:46; porcentaje como 3.1% o 0.031; número tal cual. La unidad de cada indicador está en Listas.'],
+    ['Gatillos fijos (opcional): Indicador, Mes (AAAA-MM), Gatillo relato. Reemplaza el cálculo de ese mes.'],
+    ['Súbela en la página con "Cargar Excel". Si un día ya tiene dato, se reemplaza; no se borra nada más.']];
+  var w=XLSX.utils.aoa_to_sheet(ins); w['!cols']=[{wch:115}]; XLSX.utils.book_append_sheet(wb,w,'Instrucciones');
+  w=XLSX.utils.aoa_to_sheet([['Indicador','Fecha','Valor']]); w['!cols']=[{wch:28},{wch:12},{wch:12}]; XLSX.utils.book_append_sheet(wb,w,'Datos');
+  w=XLSX.utils.aoa_to_sheet([['Indicador','Mes','Gatillo relato']]); w['!cols']=[{wch:28},{wch:10},{wch:14}]; XLSX.utils.book_append_sheet(wb,w,'Gatillos fijos');
+  var L=[['Indicador','Unidad','Sentido']]; activos().forEach(function(i){L.push([i.nombre,i.unidad,i.sentido]);});
+  w=XLSX.utils.aoa_to_sheet(L); w['!cols']=[{wch:30},{wch:12},{wch:12}]; XLSX.utils.book_append_sheet(wb,w,'Listas');
+  return wb;
+}
+function exportar(){
+  var wb=XLSX.utils.book_new(), Z={Tiempo:'[h]:mm:ss',Porcentaje:'0.00%','Número':'#,##0.000'};
+  var ins=[['Herramientas de gestión · CD Bávaro — plantilla del dashboard de gatillos'],[''],
+    ['Indicadores: una fila por indicador. Para agregar uno escribe una fila; para quitarlo bórrala o pon "No" en Activo.'],
+    ['  Unidad: Tiempo, Porcentaje o Número. Sentido: Mayor peor / Menor peor. k: desviaciones estándar (1 Almacén y 2 Distribución en el Excel anterior).'],
+    ['  Meses de historia: meses anteriores usados para el gatillo. Margen 5XQ %: cuánto más exigente es el gatillo de 5 porqués (5% en el Excel anterior).'],
+    ['  Nombres en Forms: cómo aparece el indicador en los Forms, separados por ";". Si el nombre se repite en varias áreas: Área|Nombre (ej. Distribución|Roturas).'],
+    ['Datos: Indicador, Fecha, Valor. Tiempo como 1:05:46; porcentaje como 3.1% o 0.031.'],
+    ['  Las filas con origen "Excel anterior" vienen del archivo anterior: sus valores se ordenaron sin mover las fechas, así que el día exacto no es confiable.'],
+    ['Gatillos fijos: Indicador, Mes (AAAA-MM), Gatillo relato. Reemplazan el cálculo de ese mes.'],
+    ['Gatillo = promedio ± k × desviación estándar (muestra) de los meses de historia. Mayor peor suma; Menor peor resta.'],
+    ['Plan: relatos y 5XQ por hacer. Indicador, Día (fecha del dato), Tipo (Relato o 5XQ), Responsable (solo relatos), Fecha límite, Nota, Hecho (Sí/No).'],
+    ['Al cargar este archivo en la página se reemplazan los indicadores, datos, gatillos fijos y el plan por los del archivo.']];
+  var w=XLSX.utils.aoa_to_sheet(ins); w['!cols']=[{wch:130}]; XLSX.utils.book_append_sheet(wb,w,'Instrucciones');
+  var I=[['Indicador','Área','Unidad','Sentido','Desviaciones (k)','Meses de historia','Margen 5XQ %','Nombres en Forms','Activo']];
+  S.ind.forEach(function(i){I.push([i.nombre,i.area,i.unidad,i.sentido,i.k,i.meses,i.margen,i.alias.join('; '),i.activo?'Sí':'No']);});
+  w=XLSX.utils.aoa_to_sheet(I); w['!cols']=[{wch:28},{wch:14},{wch:12},{wch:12},{wch:14},{wch:14},{wch:13},{wch:70},{wch:8}]; XLSX.utils.book_append_sheet(wb,w,'Indicadores');
+  var D=[['Indicador','Fecha','Valor','Origen']], fmts=[];
+  S.ind.forEach(function(i){var dd=S.datos[i.id]||{};Object.keys(dd).sort().forEach(function(f){
+    D.push([i.nombre,new Date(+f.slice(0,4),+f.slice(5,7)-1,+f.slice(8,10)),dd[f].v,dd[f].o==='x'?'Excel anterior':dd[f].o==='m'?'Escrito en la página':'Plantilla']); fmts.push(Z[i.unidad]);});});
+  w=XLSX.utils.aoa_to_sheet(D,{cellDates:true});
+  for(var r=1;r<D.length;r++){ var a=XLSX.utils.encode_cell({r:r,c:1}), b=XLSX.utils.encode_cell({r:r,c:2}); if(w[a]) w[a].z='yyyy-mm-dd'; if(w[b]) w[b].z=fmts[r-1]; }
+  w['!cols']=[{wch:28},{wch:12},{wch:12},{wch:22}]; XLSX.utils.book_append_sheet(wb,w,'Datos');
+  var F=[['Indicador','Mes','Gatillo relato']], ff=[];
+  S.ind.forEach(function(i){var fx=S.fijos[i.id]||{};Object.keys(fx).sort().forEach(function(m){F.push([i.nombre,m,fx[m]]);ff.push(Z[i.unidad]);});});
+  w=XLSX.utils.aoa_to_sheet(F); for(r=1;r<F.length;r++){var c=XLSX.utils.encode_cell({r:r,c:2}); if(w[c]) w[c].z=ff[r-1];}
+  w['!cols']=[{wch:28},{wch:10},{wch:14}]; XLSX.utils.book_append_sheet(wb,w,'Gatillos fijos');
+  var P=[PLAN_COLS];
+  S.plan.forEach(function(p){var i=indById(p.ind); if(i) P.push([i.nombre,fechaXL(p.f),p.t==='R'?'Relato':'5XQ',p.t==='R'?p.resp:'',fechaXL(p.lim),p.nota,p.hecho?'Sí':'No']);});
+  XLSX.utils.book_append_sheet(wb,hojaPlan(P),'Plan');
+  XLSX.writeFile(wb,'Plantilla_Gatillos_CD_Bavaro_'+ymd(new Date())+'.xlsx');
+}
+
+/* ---------------- interfaz ---------------- */
+function flash(st,html,cerrable){
+  var cls=st==='ok'?'note ok':st==='warn'?'note':'msg';
+  $('flash').innerHTML='<div class="'+cls+'"><div>'+html+'</div>'+(cerrable!==false?'<button type="button" class="quiet" data-act="flashx">Cerrar</button>':'')+'</div>';
+}
+function status(){
+  var nd=0; for(var id in S.datos) nd+=Object.keys(S.datos[id]).length;
+  var r=S.regMeta.R, f=S.regMeta['5'];
+  $('status').textContent=activos().length+' indicadores · '+nd.toLocaleString('es-DO')+' datos diarios · '+
+    (r?r.n+' relatos (hasta '+fechaCorta(r.hasta)+')':'sin relatos cargados')+' · '+(f?f.n+' 5XQ (hasta '+fechaCorta(f.hasta)+')':'sin 5XQ cargados');
+}
+function chip(st,txt){var ic={good:'✓',warn:'!',crit:'×',none:'–'}[st];return '<span class="chip s-'+st+'"><i aria-hidden="true">'+ic+'</i>'+esc(txt)+'</span>';}
+function meter(p){var st=stAdh(p);return '<div class="meter s-'+st+'" role="img" aria-label="'+pctTxt(p)+'"><i style="width:'+(p==null?0:Math.round(Math.min(1,p)*100))+'%"></i></div>';}
+function monthbar(){
+  return '<div class="monthbar"><button type="button" data-act="mes" data-k="-1" aria-label="Mes anterior">‹</button><strong>'+mesNombre(UI.mes)+'</strong><button type="button" data-act="mes" data-k="1" aria-label="Mes siguiente">›</button>'+
+    (UI.mes!==hoyMes()?'<button type="button" class="quiet" data-act="hoy">Mes actual</button>':'')+'</div>';
+}
+function fuenteTxt(ind,g){
+  if(g.fuente==='fijo') return '<span class="tag fx" title="Escrito a mano">Fijo</span>'+(g.calc!=null?' <span class="extra">calculado '+esc(fmt(g.calc,ind.unidad))+'</span>':'');
+  if(g.fuente==='calc') return '<span class="extra">'+g.n+' datos · '+MES3[+g.desde.slice(5,7)-1]+'–'+MES3[+g.hasta.slice(5,7)-1]+(g.mesesCon<ind.meses?' · <b style="color:var(--crit)">faltan '+(ind.meses-g.mesesCon)+' mes'+(ind.meses-g.mesesCon>1?'es':'')+'</b>':'')+'</span>';
+  return '<span class="extra" style="color:var(--crit)">Sin datos de '+MES3[+g.desde.slice(5,7)-1]+'–'+MES3[+g.hasta.slice(5,7)-1]+'</span>';
+}
+
+function render(){
+  document.querySelectorAll('.tabs button').forEach(function(b){b.setAttribute('aria-selected',b.dataset.view===UI.view?'true':'false');});
+  var f={mes:vMes,plan:vPlan,gat:vGat,det:vDet,dat:vDat,ind:vInd,reg:vReg}[UI.view]||vMes;
+  $('view').innerHTML=f();
+  if(UI.view==='det') dibujarChart();
+}
+
+/* ----- Vista: Mes ----- */
+function vMes(){
+  var ins=activos(), T={disp:0,hecho:0,R:0,c5:0,pend:0,dato:0,sinG:0,reg:0}, rows=[];
+  ins.forEach(function(i){var r=resumen(i,UI.mes); rows.push([i,r]); T.disp+=r.c.disp;T.hecho+=r.c.hecho;T.R+=r.c.R;T.c5+=r.c.c5;T.pend+=r.c.pend;T.dato+=r.c.dato;T.reg+=r.c.reg; if(r.g.v==null)T.sinG++;});
+  var p=T.disp?T.hecho/T.disp:null;
+  var h='<div class="sechead">'+monthbar()+'<div class="legend">'+chip('crit','Pasó el gatillo de relato')+chip('warn','Pasó el gatillo de 5XQ')+'</div></div>';
+  var avisos=[];
+  if(!S.regMeta.R&&!S.regMeta['5']) avisos.push('Carga las exportaciones de los Forms de Relatos y 5XQ para saber qué días ya se analizaron.');
+  if(T.dato===0) avisos.push('No hay datos diarios de '+mesNombre(UI.mes)+'. Escríbelos en la pestaña Datos o cárgalos con la plantilla.');
+  if(T.sinG) avisos.push(T.sinG+' indicador'+(T.sinG>1?'es':'')+' sin gatillo en este mes: faltan datos de los meses anteriores.');
+  var fin=UI.mes+'-'+pad(diasMes(UI.mes)), ini=UI.mes+'-01';
+  ['R','5'].forEach(function(t){ var m=S.regMeta[t]; if(m&&m.hasta<fin) {
+    if(m.hasta<ini) avisos.push('Los '+(t==='R'?'relatos':'5XQ')+' cargados llegan solo hasta el '+fechaCorta(m.hasta)+' '+m.hasta.slice(0,4)+': carga una exportación más reciente.');
+    else avisos.push('Los '+(t==='R'?'relatos':'5XQ')+' cargados llegan hasta el '+fechaCorta(m.hasta)+'; los días siguientes pueden salir como pendientes.'); } });
+  if(avisos.length) h+='<div class="note"><ul>'+avisos.map(function(a){return '<li>'+esc(a)+'</li>';}).join('')+'</ul></div>';
+  h+='<section class="month"><div class="card hero"><span class="lbl">Días analizados</span><div class="big">'+pctTxt(p)+'</div>'+meter(p)+
+    '<div class="facts"><span><b class="num">'+T.hecho+'</b> de <b class="num">'+T.disp+'</b> días que pasaron un gatillo tienen relato o 5XQ</span><span>'+T.reg+' relatos y 5XQ registrados en el mes</span></div></div>'+
+    '<div class="tiles"><div class="tile s-crit"><span class="lbl">Pasaron gatillo relato</span><b>'+T.R+'</b><small>días · indicador</small></div>'+
+    '<div class="tile"><span class="lbl">Solo gatillo 5XQ</span><b>'+T.c5+'</b><small>días · indicador</small></div>'+
+    '<div class="tile"><span class="lbl">Pendientes</span><b style="color:'+(T.pend?'var(--crit)':'inherit')+'">'+T.pend+'</b><small>sin análisis registrado'+(T.pend?' · <button type="button" class="quiet" data-act="vplan" style="padding:0;font-size:12px">planificar</button>':'')+'</small></div>'+
+    '<div class="tile"><span class="lbl">Datos del mes</span><b>'+T.dato+'</b><small>días · indicador con valor</small></div></div></section>';
+  h+='<section class="card"><div class="sechead"><div><h2>Gatillos de '+esc(mesNombre(UI.mes))+'</h2><p class="sub">Gatillo de relato = promedio ± k × desviación estándar de los meses anteriores. El de 5XQ (matinal / cambio de turno) es más exigente según el margen.</p></div></div><div class="scroll"><table><thead><tr><th>Indicador</th><th class="r">Gatillo relato</th><th class="r">Gatillo 5XQ</th><th>Origen</th><th class="r">Días con dato</th><th class="r">Pasaron<small>relato · 5XQ</small></th><th class="r">Analizados</th><th class="bar">Adherencia</th></tr></thead><tbody>';
+  var area=null;
+  rows.sort(function(a,b){return AREAS.indexOf(a[0].area)-AREAS.indexOf(b[0].area);}).forEach(function(x){
+    var i=x[0],r=x[1],c=r.c;
+    if(i.area!==area){area=i.area;h+='<tr class="area"><td colspan="8">'+esc(area)+'</td></tr>';}
+    h+='<tr class="click" data-act="verind" data-id="'+i.id+'"><td class="name"><button type="button" data-act="verind" data-id="'+i.id+'">'+esc(i.nombre)+'</button><div class="extra">'+esc(i.sentido)+' · k='+i.k+'</div></td>'+
+      '<td class="r">'+esc(fmt(r.g.v,i.unidad))+'</td><td class="r">'+esc(fmt(r.g.v5,i.unidad))+'</td><td>'+fuenteTxt(i,r.g)+'</td>'+
+      '<td class="r">'+c.dato+'<span class="extra"> / '+diasMes(UI.mes)+'</span></td><td class="r">'+(c.R?'<span class="cell s-crit" style="display:inline-block">'+c.R+'</span>':'0')+' · '+(c.c5?'<span class="cell s-warn" style="display:inline-block">'+c.c5+'</span>':'0')+'</td>'+
+      '<td class="r">'+c.hecho+' / '+c.disp+(c.pend?'<div class="extra" style="color:var(--crit)">'+c.pend+' pendiente'+(c.pend>1?'s':'')+'</div>':'')+'</td><td class="bar">'+(c.disp?meter(c.adh)+'<span class="extra">'+pctTxt(c.adh)+'</span>':'<span class="extra">Sin disparos</span>')+'</td></tr>';
+  });
+  h+='</tbody></table></div></section>';
+  return h;
+}
+
+/* ----- Vista: Plan de análisis ----- */
+/* Relatos y 5XQ por hacer. Un análisis queda hecho cuando aparece en los Forms (misma regla que la vista Mes: relato exige relato; 5XQ acepta cualquiera) o si se marca a mano. */
+function planEstado(p){
+  var ind=indById(p.ind);
+  if(ind&&regsDia(ind,p.f).some(function(r){return p.t==='5'||r.t==='R';})) return 'forms';
+  if(p.hecho) return 'hecho';
+  if(p.lim&&p.lim<ymd(new Date())) return 'venc';
+  return 'pend';
+}
+/* Solo los relatos llevan responsable (nombres fijos); los 5XQ no. */
+function nuevoPlan(id,f,t,resp,lim,nota){var i=indById(id);t=t==='5'?'5':'R';return {id:uid(),ind:id,indN:i?i.nombre:'',f:f,t:t,resp:t==='R'?resp||'':'',lim:lim||'',nota:nota||'',hecho:false};}
+function fechaXL(f){return f?new Date(+f.slice(0,4),+f.slice(5,7)-1,+f.slice(8,10)):'';}
+function hojaPlan(P){
+  var w=XLSX.utils.aoa_to_sheet(P,{cellDates:true});
+  for(var r=1;r<P.length;r++) [1,4].forEach(function(c){var ad=XLSX.utils.encode_cell({r:r,c:c}); if(w[ad]&&P[r][c]) w[ad].z='yyyy-mm-dd';});
+  w['!cols']=[{wch:28},{wch:12},{wch:8},{wch:24},{wch:12},{wch:40},{wch:7}]; return w;
+}
+var PLAN_COLS=['Indicador','Día','Tipo','Responsable (solo relatos)','Fecha límite','Nota','Hecho'];
+/* Formato para subir el plan desde Excel. Con conDias trae los días por planificar del mes que se está viendo. */
+function formatoPlan(conDias){
+  var wb=XLSX.utils.book_new();
+  var ins=[['Plan de análisis · CD Bávaro — formato para subir los relatos y 5XQ por hacer'],[''],
+    ['Una fila por análisis, en la hoja Plan.'],
+    ['  Indicador: escrito como en la hoja Listas.'],
+    ['  Día: fecha del dato que pasó el gatillo (2026-11-03 o 3/11/2026).'],
+    ['  Tipo: Relato o 5XQ.'],
+    ['  Responsable: solo para relatos. En los 5XQ déjalo vacío (se ignora).'],
+    ['  Fecha límite y Nota: opcionales. Hecho: escribe Sí si ya se hizo pero aún no está en los Forms.'],
+    ['Súbelo en la página con "Cargar Excel" (o "Cargar plan" en la pestaña Plan de análisis).'],
+    ['  Si un análisis ya está en el plan (mismo indicador, día y tipo) se actualiza; si no, se agrega. No se borra nada del plan.']];
+  var w=XLSX.utils.aoa_to_sheet(ins); w['!cols']=[{wch:110}]; XLSX.utils.book_append_sheet(wb,w,'Instrucciones');
+  var P=[PLAN_COLS];
+  if(conDias) porPlanificar(UI.mes).forEach(function(x){P.push([x.i.nombre,fechaXL(x.d.f),x.d.lv==='R'?'Relato':'5XQ','','','','']);});
+  XLSX.utils.book_append_sheet(wb,hojaPlan(P),'Plan');
+  var L=[['Indicadores','Tipo']], ins2=activos();
+  for(var k=0;k<Math.max(ins2.length,2);k++) L.push([ins2[k]?ins2[k].nombre:'',['Relato','5XQ'][k]||'']);
+  w=XLSX.utils.aoa_to_sheet(L); w['!cols']=[{wch:30},{wch:10}]; XLSX.utils.book_append_sheet(wb,w,'Listas');
+  return wb;
+}
+/* Días del mes que pasaron un gatillo, sin análisis en los Forms y que no están en el plan */
+function porPlanificar(mes){
+  var ya={}, out=[]; S.plan.forEach(function(p){ya[p.ind+'|'+p.f]=1;});
+  activos().forEach(function(i){ var r=resumen(i,mes); r.dias.forEach(function(d){ if((d.est==='pend'||d.est==='parcial')&&!ya[i.id+'|'+d.f]) out.push({i:i,d:d,g:r.g}); }); });
+  return out.sort(function(a,b){return a.d.f<b.d.f?-1:a.d.f>b.d.f?1:0;});
+}
+function vPlan(){
+  var abiertos=UI.planVer==='abiertos', orden={venc:0,pend:1,hecho:2,forms:3}, cmp=function(a,b){return a<b?-1:a>b?1:0;};
+  var lst=S.plan.filter(function(p){ if(!indById(p.ind)) return false; p._e=planEstado(p); return abiertos?(p._e==='pend'||p._e==='venc'):p.f.slice(0,7)===UI.mes; })
+    .sort(function(a,b){return orden[a._e]-orden[b._e]||cmp(a.lim||'9999',b.lim||'9999')||cmp(a.f,b.f);});
+  var T={hecho:0,pend:0,venc:0,sinR:0};
+  lst.forEach(function(p){ if(p._e==='forms'||p._e==='hecho') T.hecho++; else { T[p._e]++; if(p.t==='R'&&!p.resp) T.sinR++; } });
+  var rs={}; S.plan.concat(S.reg).forEach(function(x){ if(x.t==='R'&&x.resp) rs[String(x.resp).trim()]=1; });
+  var h='<datalist id="dlResp">'+Object.keys(rs).sort().map(function(r){return '<option value="'+esc(r)+'">';}).join('')+'</datalist>';
+  h+='<div class="sechead">'+(abiertos?'<div><h2>Todo lo abierto</h2><p class="sub">Pendientes y vencidos de todos los meses</p></div>':monthbar())+
+    '<div class="seg" role="group" aria-label="Qué mostrar"><button type="button" data-act="pver" data-v="mes" aria-pressed="'+!abiertos+'">Por mes</button><button type="button" data-act="pver" data-v="abiertos" aria-pressed="'+abiertos+'">Todo lo abierto</button></div></div>';
+  h+='<div class="tiles"><div class="tile"><span class="lbl">En el plan</span><b>'+lst.length+'</b><small>análisis</small></div>'+
+    '<div class="tile"><span class="lbl">Hechos</span><b>'+T.hecho+'</b><small>en los Forms o marcados</small></div>'+
+    '<div class="tile"><span class="lbl">Pendientes</span><b>'+T.pend+'</b><small>a tiempo</small></div>'+
+    '<div class="tile"><span class="lbl">Vencidos</span><b style="color:'+(T.venc?'var(--crit)':'inherit')+'">'+T.venc+'</b><small>pasó la fecha límite</small></div>'+
+    '<div class="tile"><span class="lbl">Sin responsable</span><b>'+T.sinR+'</b><small>relatos abiertos sin asignar</small></div></div>';
+  if(!abiertos){
+    var pp=porPlanificar(UI.mes);
+    h+='<section class="card"><div class="sechead"><div><span class="lbl">Por planificar</span><h2>Días que pasaron un gatillo sin análisis</h2><p class="sub">'+
+      (pp.length?pp.length+' día'+(pp.length>1?'s':'')+' · indicador sin relato ni 5XQ en los Forms y fuera del plan.':'Todos los días que pasaron un gatillo ya tienen análisis o están en el plan.')+'</p></div></div>';
+    if(pp.length){
+      h+='<div class="form" style="margin-top:10px;max-width:640px"><label>Responsable (relatos)<input type="text" id="ppResp" list="dlResp" placeholder="Nombre" value="'+esc(UI.ppResp)+'"></label><label>Fecha límite<input type="date" id="ppLim" value="'+esc(UI.ppLim)+'"></label>'+
+        '<div><button type="button" class="pri" data-act="paddall">Agregar todos ('+pp.length+')</button></div></div><p class="hint" style="margin-top:6px">La fecha límite se pone a todo lo que agregues; el responsable, solo a los relatos (los 5XQ no llevan). Luego puedes cambiarlos en el plan.</p>';
+      h+='<div class="scroll" style="margin-top:10px"><table><thead><tr><th>Día</th><th>Indicador</th><th class="r">Valor</th><th class="r">Gatillo</th><th>Falta</th><th></th></tr></thead><tbody>'+
+        pp.map(function(x){var i=x.i,d=x.d,t=d.lv==='R'?'R':'5';
+          return '<tr><td class="num" style="white-space:nowrap">'+fechaCorta(d.f)+(d.x&&d.x.o==='x'?' <span class="tag" title="Fecha aproximada (Excel anterior)">aprox.</span>':'')+'</td><td>'+esc(i.nombre)+'<div class="extra">'+esc(i.area)+'</div></td>'+
+            '<td class="r"><span class="cell s-'+(t==='R'?'crit':'warn')+'">'+esc(fmt(d.v,i.unidad))+'</span></td><td class="r">'+esc(fmt(t==='R'?x.g.v:x.g.v5,i.unidad))+'</td>'+
+            '<td>'+(t==='R'?'Relato':'5XQ')+(d.est==='parcial'?'<div class="extra">tiene 5XQ, falta el relato</div>':'')+'</td><td class="r"><button type="button" data-act="padd" data-id="'+i.id+'" data-f="'+d.f+'" data-t="'+t+'">Agregar</button></td></tr>';}).join('')+
+        '</tbody></table></div>';
+    }
+    h+='</section>';
+  }
+  h+='<section class="card"><div class="sechead"><div><span class="lbl">Plan</span><h2>'+(abiertos?'Análisis abiertos':'Análisis de '+esc(mesNombre(UI.mes)))+'</h2><p class="sub">Queda hecho solo cuando el relato o 5XQ aparece en los Forms cargados. Si ya se hizo y aún no está en los Forms, márcalo a mano.</p></div>'+
+    '<div class="row"><button type="button" data-act="pformato" title="Trae los días por planificar de '+esc(mesNombre(UI.mes))+'">Descargar formato</button><label class="btn" for="file">Cargar plan</label></div></div>'+
+    '<p class="hint" style="margin-top:6px">El formato de Excel viene con los días por planificar de '+esc(mesNombre(UI.mes))+'. Complétalo y súbelo con "Cargar plan": se agrega al plan sin borrar lo que ya está.</p>'+
+    '<details style="margin-top:10px"><summary>Agregar un análisis a mano</summary><div class="form" style="margin-top:10px">'+
+    '<label>Indicador<select id="pnInd">'+activos().map(function(x){return '<option value="'+x.id+'">'+esc(x.nombre)+'</option>';}).join('')+'</select></label>'+
+    '<label>Día<input type="date" id="pnF" value="'+(UI.mes===hoyMes()?ymd(new Date()):UI.mes+'-01')+'"></label>'+
+    '<label>Tipo<select id="pnT" data-chg="pnT"><option value="R">Relato</option><option value="5">5XQ</option></select></label>'+
+    '<label id="pnRespL">Responsable<input type="text" id="pnResp" list="dlResp"></label><label>Fecha límite<input type="date" id="pnLim"></label><label>Nota<input type="text" id="pnNota"></label>'+
+    '<div><button type="button" class="pri" data-act="pnew">Agregar</button></div></div><p class="hint" id="pnErr" style="color:var(--crit);margin-top:6px"></p></details>';
+  h+='<div class="scroll" style="margin-top:10px"><table class="plan"><thead><tr><th>Día</th><th>Indicador</th><th>Tipo</th><th>Responsable</th><th>Fecha límite</th><th>Nota</th><th>Estado</th><th class="c">Hecho</th><th></th></tr></thead><tbody>';
+  if(!lst.length) h+='<tr><td colspan="9" class="sub">'+(abiertos?'No hay análisis abiertos.':'Nada planificado en este mes.')+'</td></tr>';
+  lst.forEach(function(p){
+    var i=indById(p.ind), e=p._e;
+    var est=e==='forms'?'<span class="pill s-good">Hecho · en Forms</span>':e==='hecho'?'<span class="pill s-good">Hecho · marcado</span><div class="extra">aún no está en los Forms</div>':e==='venc'?'<span class="pill s-crit">Vencido</span>':'<span class="pill s-warn">Pendiente</span>';
+    h+='<tr'+(e==='forms'||e==='hecho'?' class="done"':'')+'><td class="num" style="white-space:nowrap">'+fechaCorta(p.f)+'</td><td>'+esc(i.nombre)+'<div class="extra">'+esc(i.area)+'</div></td><td>'+(p.t==='R'?'Relato':'5XQ')+'</td>'+
+      '<td>'+(p.t==='R'?'<input type="text" class="resp" list="dlResp" data-pid="'+p.id+'" data-pf="resp" value="'+esc(p.resp)+'" aria-label="Responsable">':'<span class="extra">No aplica</span>')+'</td>'+
+      '<td><input type="date" data-pid="'+p.id+'" data-pf="lim" value="'+esc(p.lim)+'" aria-label="Fecha límite"></td>'+
+      '<td><input type="text" class="nota" data-pid="'+p.id+'" data-pf="nota" value="'+esc(p.nota)+'" aria-label="Nota"></td>'+
+      '<td>'+est+'</td><td class="c"><input type="checkbox" data-pid="'+p.id+'" data-pf="hecho"'+(e==='forms'||p.hecho?' checked':'')+(e==='forms'?' disabled':'')+' aria-label="Hecho"></td>'+
+      '<td><button type="button" class="rm" data-act="pdel" data-pid="'+p.id+'" aria-label="Quitar del plan">×</button></td></tr>';
+  });
+  h+='</tbody></table></div></section>';
+  return h;
+}
+
+/* ----- Vista: Gatillos del año ----- */
+function vGat(){
+  var y=UI.anio, cur=hoyMes(), tipo=UI.gtipo;
+  var h='<section class="card"><div class="sechead"><div><span class="lbl">Como la hoja "2. Indicadores"</span><h2>Gatillos '+y+'</h2><p class="sub">Clic en un gatillo para fijarlo a mano o volver al cálculo. Los fijos van en azul.</p></div>'+
+    '<div class="row"><div class="monthbar"><button type="button" data-act="anio" data-k="-1" aria-label="Año anterior">‹</button><strong style="min-width:60px">'+y+'</strong><button type="button" data-act="anio" data-k="1" aria-label="Año siguiente">›</button></div>'+
+    '<div class="seg" role="group" aria-label="Tipo de gatillo"><button type="button" data-act="gtipo" data-t="R" aria-pressed="'+(tipo==='R')+'">Relato</button><button type="button" data-act="gtipo" data-t="5" aria-pressed="'+(tipo==='5')+'">5XQ matinal</button></div></div></div>';
+  h+='<div class="scroll"><table class="gm"><thead><tr><th>Indicador</th>';
+  for(var m=1;m<=12;m++){var mm=y+'-'+pad(m);h+='<th class="r'+(mm===cur?' cur':'')+'">'+MES3[m-1]+'</th>';}
+  h+='</tr></thead><tbody>';
+  activos().forEach(function(i){
+    h+='<tr><td class="name"><button type="button" data-act="verind" data-id="'+i.id+'">'+esc(i.nombre)+'</button><div class="extra">'+esc(i.unidad)+' · '+esc(i.sentido)+'</div></td>';
+    for(var m=1;m<=12;m++){
+      var mm=y+'-'+pad(m), g=gatillo(i,mm), v=tipo==='R'?g.v:g.v5;
+      h+='<td class="g"><button type="button" data-act="editg" data-id="'+i.id+'" data-m="'+mm+'" class="'+(g.fuente==='fijo'?'fx ':'')+(mm===cur?'cur ':'')+(v==null?'empty':'')+'" title="'+esc(g.fuente==='fijo'?'Fijo a mano':g.fuente==='calc'?g.n+' datos de '+g.desde+' a '+g.hasta:'Sin datos suficientes')+'">'+esc(fmt(v,i.unidad))+'</button></td>';
+    }
+    h+='</tr>';
+  });
+  h+='</tbody></table></div></section>';
+  return h;
+}
+function abrirEditorG(id,mes){
+  var i=indById(id), g=gatillo(i,mes), fx=(S.fijos[id]||{})[mes];
+  var ph=i.unidad==='Tiempo'?'1:05:46':i.unidad==='Porcentaje'?'3.10%':'25.5';
+  $('pop').innerHTML='<div class="card" role="dialog" aria-modal="true" aria-labelledby="popt"><div><span class="lbl">'+esc(mesNombre(mes))+'</span><h2 id="popt">'+esc(i.nombre)+'</h2></div>'+
+    '<div class="facts"><span>Calculado: <b>'+esc(fmt(g.calc,i.unidad))+'</b>'+(g.calc!=null?' (promedio '+esc(fmt(g.prom,i.unidad))+', desviación '+esc(fmt(g.sd,i.unidad))+', '+g.n+' datos de '+fechaCorta(g.desde)+' a '+fechaCorta(g.hasta)+')':' — no hay al menos 2 datos en '+fechaCorta(g.desde)+' a '+fechaCorta(g.hasta))+'</span>'+
+    (fx!=null?'<span>Fijo ahora: <b style="color:var(--accent)">'+esc(fmt(fx,i.unidad))+'</b></span>':'')+'</div>'+
+    '<label class="form" style="grid-template-columns:1fr"><label>Gatillo de relato fijo ('+esc(i.unidad.toLowerCase())+')<input type="text" id="gin" placeholder="'+ph+'" value="'+(fx!=null?esc(fmt(fx,i.unidad)):'')+'"></label></label>'+
+    '<p class="hint">El gatillo de 5XQ se ajusta solo ('+i.margen+'% más exigente).</p><p class="hint" id="gerr" style="color:var(--crit)"></p>'+
+    '<div class="row" style="justify-content:flex-end">'+(fx!=null?'<button type="button" data-act="gquitar" data-id="'+id+'" data-m="'+mes+'">Usar el calculado</button>':'')+
+    (g.calc!=null?'<button type="button" data-act="gcopiar" data-id="'+id+'" data-m="'+mes+'">Fijar el calculado</button>':'')+
+    '<button type="button" data-act="popx">Cancelar</button><button type="button" class="pri" data-act="gfijar" data-id="'+id+'" data-m="'+mes+'">Guardar</button></div></div>';
+  $('pop').hidden=false; setTimeout(function(){var x=$('gin');if(x)x.focus();},0);
+}
+
+/* ----- Vista: Detalle ----- */
+function vDet(){
+  var ins=activos(); if(!ins.length) return '<div class="note">No hay indicadores activos.</div>';
+  if(!indById(UI.ind)||!indById(UI.ind).activo) UI.ind=ins[0].id;
+  var i=indById(UI.ind), r=resumen(i,UI.mes), g=r.g;
+  var h='<div class="sechead"><div class="row"><label class="vh" for="selInd">Indicador</label><select id="selInd" data-chg="ind">'+ins.map(function(x){return '<option value="'+x.id+'"'+(x.id===i.id?' selected':'')+'>'+esc(x.nombre)+'</option>';}).join('')+'</select>'+monthbar()+'</div>'+
+    '<div class="legend">'+chip('crit','Gatillo relato '+fmt(g.v,i.unidad))+chip('warn','Gatillo 5XQ '+fmt(g.v5,i.unidad))+'</div></div>';
+  h+='<section class="card"><div class="sechead"><div><span class="lbl">'+esc(i.area)+' · '+esc(i.sentido)+' · k='+i.k+'</span><h2>'+esc(i.nombre)+' en '+esc(mesNombre(UI.mes))+'</h2><p class="sub">'+
+    (g.fuente==='fijo'?'Gatillo fijo a mano.':g.fuente==='calc'?'Gatillo calculado con '+g.n+' datos del '+fechaCorta(g.desde)+' al '+fechaCorta(g.hasta)+': promedio '+fmt(g.prom,i.unidad)+', desviación '+fmt(g.sd,i.unidad)+'.':'Sin gatillo: faltan datos del '+fechaCorta(g.desde)+' al '+fechaCorta(g.hasta)+'.')+
+    '</p></div><button type="button" data-act="editg" data-id="'+i.id+'" data-m="'+UI.mes+'">Cambiar gatillo</button></div>'+
+    '<div class="chartbox" id="chart"></div></section>';
+  var vx=r.dias.some(function(d){return d.x&&d.x.o==='x';});
+  if(vx) h+='<div class="note"><p>Algunos valores de este mes vienen del Excel anterior, donde se ordenaron sin mover sus fechas: el día exacto puede no ser el real. El gatillo no cambia, pero el día que "pasó" sí puede. Reemplázalos con el dato diario.</p></div>';
+  h+='<section class="card"><div class="sechead"><div><h2>Agregar o corregir un día</h2></div></div><div class="form" style="margin-top:10px">'+
+    '<label>Fecha<input type="date" id="dFecha" value="'+UI.mes+'-01" min="'+UI.mes+'-01" max="'+UI.mes+'-'+pad(diasMes(UI.mes))+'"></label>'+
+    '<label>Valor ('+esc(i.unidad.toLowerCase())+')<input type="text" id="dValor" placeholder="'+(i.unidad==='Tiempo'?'1:05:46':i.unidad==='Porcentaje'?'3.1%':'25.5')+'"></label>'+
+    '<div><button type="button" class="pri" data-act="dadd" data-id="'+i.id+'">Guardar día</button></div></div><p class="hint" id="derr" style="color:var(--crit);margin-top:6px"></p></section>';
+  h+='<section class="card"><div class="sechead"><div><h2>Días del mes</h2><p class="sub">'+r.c.dato+' días con dato · '+r.c.disp+' pasaron un gatillo · '+r.c.hecho+' con análisis'+(S.cfg.tol?' (se cuenta el análisis del mismo día o hasta '+S.cfg.tol+' día'+(S.cfg.tol>1?'s':'')+' después)':'')+'</p></div></div><div class="scroll"><table class="reg"><thead><tr><th>Fecha</th><th class="r">Valor</th><th>Gatillo</th><th>Análisis</th><th>Causa raíz / acción</th><th></th></tr></thead><tbody>';
+  if(!r.dias.length) h+='<tr><td colspan="6" class="sub">Sin datos ni registros este mes.</td></tr>';
+  r.dias.forEach(function(d){
+    var st=d.lv==='R'?'crit':d.lv==='5'?'warn':d.lv==='ok'?'good':'none';
+    var lvTxt=d.lv==='R'?'Pasó relato':d.lv==='5'?'Pasó 5XQ':d.lv==='ok'?'Dentro':'—';
+    var an=d.rg.length?'<div class="pills">'+d.rg.map(function(x){return '<span class="pill s-good">'+(x.t==='R'?'Relato':'5XQ')+(x.f!==d.f?' · '+fechaCorta(x.f):'')+(x.ruta?' · '+esc(x.ruta):'')+'</span>';}).join('')+'</div>':
+      (d.est==='pend'?'<span class="pill s-crit">Falta '+(d.lv==='R'?'relato':'5XQ')+'</span>':'');
+    if(d.est==='parcial') an+='<div class="extra" style="color:var(--crit)">Pasó el gatillo de relato: falta el relato</div>';
+    var ca=d.rg.slice(0,2).map(function(x){return (x.causa?'<div><b>Causa:</b> '+esc(x.causa)+'</div>':'')+(x.acc?'<div class="extra"><b>Acción:</b> '+esc(x.acc)+'</div>':'');}).join('');
+    h+='<tr><td class="num" style="white-space:nowrap">'+fechaCorta(d.f)+(d.x&&d.x.o==='x'?' <span class="tag" title="Fecha aproximada (Excel anterior)">aprox.</span>':'')+'</td><td class="r"><span class="cell s-'+st+'">'+esc(fmt(d.v,i.unidad))+'</span></td><td>'+esc(lvTxt)+'</td><td>'+an+'</td><td class="long">'+ca+'</td>'+
+      '<td>'+(d.x?'<button type="button" class="rm" data-act="ddel" data-id="'+i.id+'" data-f="'+d.f+'" aria-label="Borrar el dato del '+fechaCorta(d.f)+'">×</button>':'')+'</td></tr>';
+  });
+  h+='</tbody></table></div></section>';
+  return h;
+}
+function dibujarChart(){
+  var box=$('chart'); if(!box) return;
+  var i=indById(UI.ind), r=resumen(i,UI.mes), g=r.g, n=diasMes(UI.mes), dd=S.datos[i.id]||{};
+  var pts=[]; for(var d=1;d<=n;d++){var f=UI.mes+'-'+pad(d); if(dd[f]) pts.push({d:d,f:f,v:dd[f].v,lv:nivel(i,dd[f].v,g)});}
+  if(!pts.length){box.innerHTML='<p class="sub" style="padding:24px 0">Sin datos diarios en '+esc(mesNombre(UI.mes))+'.</p>';return;}
+  var W=Math.max(320,box.clientWidth||900), H=260, L=64, R=12, T=14, B=26;
+  var vs=pts.map(function(p){return p.v;}); if(g.v!=null){vs.push(g.v);vs.push(g.v5);}
+  var lo=Math.min.apply(null,vs), hi=Math.max.apply(null,vs); if(lo===hi){lo-=Math.abs(lo)*.1||1;hi+=Math.abs(hi)*.1||1;}
+  var pd=(hi-lo)*.08; lo-=pd; hi+=pd;
+  var x=function(dd){return L+(dd-1)/(Math.max(1,n-1))*(W-L-R);}, y=function(v){return T+(hi-v)/(hi-lo)*(H-T-B);};
+  var s='<svg class="ch" viewBox="0 0 '+W+' '+H+'" role="img" aria-label="Valores diarios de '+esc(i.nombre)+' contra el gatillo">';
+  for(var k=0;k<=4;k++){var v=lo+(hi-lo)*k/4,yy=y(v);s+='<line class="gl" x1="'+L+'" x2="'+(W-R)+'" y1="'+yy+'" y2="'+yy+'"/><text x="'+(L-6)+'" y="'+(yy+4)+'" text-anchor="end">'+esc(fmt(v,i.unidad))+'</text>';}
+  for(d=1;d<=n;d+=(W<520?4:2)) s+='<text x="'+x(d)+'" y="'+(H-6)+'" text-anchor="middle">'+d+'</text>';
+  s+='<line class="ax" x1="'+L+'" x2="'+(W-R)+'" y1="'+(H-B)+'" y2="'+(H-B)+'"/>';
+  if(g.v!=null){s+='<line class="g5" x1="'+L+'" x2="'+(W-R)+'" y1="'+y(g.v5)+'" y2="'+y(g.v5)+'"/><line class="gR" x1="'+L+'" x2="'+(W-R)+'" y1="'+y(g.v)+'" y2="'+y(g.v)+'"/>';}
+  s+='<polyline class="ln" points="'+pts.map(function(p){return x(p.d)+','+y(p.v);}).join(' ')+'"/>';
+  pts.forEach(function(p){var c=p.lv==='R'?'var(--crit)':p.lv==='5'?'var(--warn)':'var(--series)';s+='<circle data-tip="'+esc(fechaCorta(p.f)+' · '+fmt(p.v,i.unidad))+'" cx="'+x(p.d)+'" cy="'+y(p.v)+'" r="'+(p.lv==='R'||p.lv==='5'?5:3.5)+'" fill="'+c+'"/>';});
+  s+='</svg><div class="tip" id="tip" hidden></div>';
+  box.innerHTML=s;
+  box.querySelector('svg').addEventListener('mousemove',function(e){
+    var t=e.target.closest('circle'), tip=$('tip'); if(!t){tip.hidden=true;return;}
+    var b=box.getBoundingClientRect(), c=t.getBoundingClientRect(); tip.textContent=t.dataset.tip; tip.hidden=false;
+    tip.style.left=(c.left+c.width/2-b.left)+'px'; tip.style.top=(c.top-b.top)+'px';
+  });
+  box.querySelector('svg').addEventListener('mouseleave',function(){$('tip').hidden=true;});
+}
+
+/* ----- Vista: Datos ----- */
+function vDat(){
+  var ins=activos(); if(!UI.datInd||!indById(UI.datInd)) UI.datInd=ins.length?ins[0].id:'';
+  var i=indById(UI.datInd);
+  var h='<section class="card"><div class="sechead"><div><span class="lbl">Captura</span><h2>Pegar o escribir datos diarios</h2><p class="sub">Una línea por día: <b>fecha y valor</b> (para el indicador elegido) o <b>indicador, fecha y valor</b>. Separados por tabulador (copiado de Excel), punto y coma o coma.</p></div></div>'+
+    '<div class="form" style="margin-top:10px;grid-template-columns:minmax(200px,280px) 1fr"><label>Indicador<select id="datInd" data-chg="datInd">'+ins.map(function(x){return '<option value="'+x.id+'"'+(x.id===UI.datInd?' selected':'')+'>'+esc(x.nombre)+' ('+esc(x.unidad.toLowerCase())+')</option>';}).join('')+'</select></label>'+
+    '<label>Datos<textarea id="pegar" placeholder="'+(i&&i.unidad==='Tiempo'?'2026-10-01\t1:02:15\n2026-10-02\t0:58:40':'2026-10-01\t3.2%\n2026-10-02\t2.9%')+'"></textarea></label></div>'+
+    '<div class="row" style="margin-top:10px"><button type="button" class="pri" data-act="pegar">Guardar datos</button><span class="hint">Si el día ya tiene dato, se reemplaza.</span></div><p class="hint" id="perr" style="color:var(--crit);margin-top:6px"></p></section>';
+  // tabla
+  var mesF=UI.datMes, filasD=[], dd=i?S.datos[i.id]||{}:{};
+  Object.keys(dd).sort().reverse().forEach(function(f){ if(!mesF||f.slice(0,7)===mesF) filasD.push(f); });
+  var mesesDisp={}; Object.keys(dd).forEach(function(f){mesesDisp[f.slice(0,7)]=1;});
+  h+='<section class="card"><div class="sechead"><div><h2>Datos de '+esc(i?i.nombre:'')+'</h2><p class="sub">'+Object.keys(dd).length+' días con dato</p></div><div class="row"><label class="vh" for="datMes">Mes</label><select id="datMes" data-chg="datMes"><option value="">Todos los meses</option>'+
+    Object.keys(mesesDisp).sort().reverse().map(function(m){return '<option value="'+m+'"'+(m===mesF?' selected':'')+'>'+mesNombre(m)+'</option>';}).join('')+'</select>'+
+    (filasD.length?'<button type="button" class="danger" data-act="dborrarmes">Borrar '+(mesF?'este mes':'todos')+'</button>':'')+'</div></div>'+
+    '<div id="confirmD"></div><div class="scroll"><table><thead><tr><th>Fecha</th><th class="r">Valor</th><th>Origen</th><th></th></tr></thead><tbody>';
+  if(!filasD.length) h+='<tr><td colspan="4" class="sub">Sin datos.</td></tr>';
+  filasD.slice(0,400).forEach(function(f){var x=dd[f];h+='<tr><td class="num">'+f+'</td><td class="r">'+esc(fmt(x.v,i.unidad))+'</td><td class="extra">'+(x.o==='x'?'Excel anterior (fecha aprox.)':x.o==='m'?'Escrito en la página':'Plantilla')+'</td><td><button type="button" class="rm" data-act="ddel" data-id="'+i.id+'" data-f="'+f+'" aria-label="Borrar '+f+'">×</button></td></tr>';});
+  if(filasD.length>400) h+='<tr><td colspan="4" class="sub">Se muestran 400 de '+filasD.length+'. Elige un mes para ver el resto.</td></tr>';
+  h+='</tbody></table></div></section>';
+  return h;
+}
+function pegarDatos(){
+  var txt=$('pegar').value, ok=0, mal=[], byN={}; S.ind.forEach(function(x){byN[norm(x.nombre)]=x;});
+  var def=indById(UI.datInd);
+  txt.split(/\r?\n/).forEach(function(l,ix){
+    if(!l.trim()) return;
+    var p=l.split(/\t|;/); if(p.length<2) p=l.split(',');
+    p=p.map(function(s){return s.trim();}).filter(function(s){return s!=='';});
+    var ind=def, fe, v;
+    if(p.length>=3&&byN[norm(p[0])]){ind=byN[norm(p[0])];p=p.slice(1);}
+    else if(p.length>=3){ // valor con coma decimal partido: "3,1"
+      p=[p[0],p.slice(1).join(',')]; }
+    fe=parseFecha(p[0]); v=parseVal(p[1],ind.unidad);
+    if(!fe||v==null){mal.push(ix+1);return;}
+    (S.datos[ind.id]=S.datos[ind.id]||{})[fe]={v:v,o:'m'}; ok++;
+  });
+  invalidar(); guardar(); render();
+  if(mal.length) $('perr').textContent='No entendí '+mal.length+' línea'+(mal.length>1?'s':'')+' ('+mal.slice(0,8).join(', ')+(mal.length>8?'…':'')+'). Usa fecha como 2026-10-01 o 1/10/2026 y valor como '+(def.unidad==='Tiempo'?'1:05:46':def.unidad==='Porcentaje'?'3.1%':'25.5')+'.';
+  if(ok) flash('ok',ok+' dato'+(ok>1?'s':'')+' guardado'+(ok>1?'s':'')+'.');
+}
+
+/* ----- Vista: Indicadores ----- */
+function vInd(){
+  var h='<section class="card"><div class="sechead"><div><span class="lbl">Catálogo</span><h2>Indicadores con gatillo</h2><p class="sub">Los cambios se guardan al salir de cada campo. "Nombres en Forms" une el indicador con los relatos y 5XQ (separados por ;). Para un nombre que se repite en varias áreas usa Área|Nombre.</p></div>'+
+    '<div class="row"><button type="button" class="pri" data-act="iadd">Agregar indicador</button></div></div><div id="confirmI"></div>'+
+    '<div class="scroll" style="margin-top:10px"><table class="cat"><thead><tr><th>Indicador</th><th>Área</th><th>Unidad</th><th>Sentido</th><th class="r">k</th><th class="r">Meses<small>historia</small></th><th class="r">Margen<small>5XQ %</small></th><th>Nombres en Forms</th><th>Activo</th><th></th></tr></thead><tbody>';
+  S.ind.forEach(function(i){
+    var sel=function(f,ops){return '<select data-f="'+f+'" data-id="'+i.id+'">'+ops.map(function(o){return '<option'+(o===i[f]?' selected':'')+'>'+esc(o)+'</option>';}).join('')+'</select>';};
+    h+='<tr><td><input type="text" data-f="nombre" data-id="'+i.id+'" value="'+esc(i.nombre)+'" aria-label="Nombre"></td><td>'+sel('area',AREAS.indexOf(i.area)<0?AREAS.concat([i.area]):AREAS)+'</td><td>'+sel('unidad',UNIDADES)+'</td><td>'+sel('sentido',SENTIDOS)+'</td>'+
+      '<td><input class="n" type="number" step="0.5" min="0" data-f="k" data-id="'+i.id+'" value="'+i.k+'" aria-label="k"></td><td><input class="n" type="number" min="1" max="24" data-f="meses" data-id="'+i.id+'" value="'+i.meses+'" aria-label="Meses de historia"></td>'+
+      '<td><input class="n" type="number" step="1" min="0" max="50" data-f="margen" data-id="'+i.id+'" value="'+i.margen+'" aria-label="Margen 5XQ"></td>'+
+      '<td><input type="text" data-f="alias" data-id="'+i.id+'" value="'+esc(i.alias.join('; '))+'" aria-label="Nombres en Forms" style="min-width:260px"></td>'+
+      '<td class="c"><input type="checkbox" data-f="activo" data-id="'+i.id+'"'+(i.activo?' checked':'')+' aria-label="Activo"></td>'+
+      '<td><button type="button" class="rm" data-act="idel" data-id="'+i.id+'" aria-label="Eliminar '+esc(i.nombre)+'">×</button></td></tr>';
+  });
+  h+='</tbody></table></div></section>';
+  h+='<section class="card"><div class="sechead"><div><h2>Ajustes</h2></div></div><div class="form" style="margin-top:10px;max-width:520px"><label>Contar el análisis hecho hasta N días después del dato<input type="number" min="0" max="7" id="tol" data-chg="tol" value="'+S.cfg.tol+'"></label></div>'+
+    '<p class="hint" style="margin-top:6px">Con 1, un relato registrado con fecha del día siguiente también cuenta.</p>'+
+    '<div class="row" style="margin-top:14px"><button type="button" class="danger" data-act="reset">Volver a los datos del Excel anterior</button></div><div id="confirmR"></div></section>';
+  return h;
+}
+
+/* ----- Vista: Relatos y 5XQ ----- */
+function vReg(){
+  var ri=regIndex(), R=S.regMeta.R, F=S.regMeta['5'];
+  var h='<section class="month"><div class="card hero"><span class="lbl">Exportaciones de los Forms</span>'+
+    '<div class="facts" style="font-size:14px"><span><b>Relatos:</b> '+(R?R.n+' de Bávaro, '+R.desde+' a '+R.hasta+' · '+esc(R.archivo)+' (cargado '+R.cargado+')':'no cargados')+'</span>'+
+    '<span><b>5XQ:</b> '+(F?F.n+' de Bávaro, '+F.desde+' a '+F.hasta+' · '+esc(F.archivo)+' (cargado '+F.cargado+')':'no cargados')+'</span></div>'+
+    '<p class="hint">Descarga las respuestas de cada Forms en Excel y arrástralas aquí. Cada archivo reemplaza los registros de su tipo.</p></div>';
+  var sin=Object.keys(ri.sinInd).sort(function(a,b){return ri.sinInd[b]-ri.sinInd[a];});
+  h+='<div class="card"><h2>Indicadores de los Forms sin gatillo</h2><p class="sub" style="margin:4px 0 8px">Si alguno es el mismo que uno del catálogo, únelo; si no, se queda como registro sin gatillo.</p>';
+  if(!sin.length) h+='<p class="sub">'+(S.reg.length?'Todos los registros se unieron a un indicador.':'Sin registros cargados.')+'</p>';
+  else { h+='<div class="scroll"><table><tbody>'+sin.slice(0,15).map(function(k){var p=k.split('|');return '<tr><td>'+esc(p[1])+'<div class="extra">'+esc(p[0]||'Sin área')+'</div></td><td class="r">'+ri.sinInd[k]+'</td><td><select data-chg="alias" data-k="'+esc(k)+'" aria-label="Unir '+esc(p[1])+' con"><option value="">Unir con…</option>'+activos().map(function(i){return '<option value="'+i.id+'">'+esc(i.nombre)+'</option>';}).join('')+'</select></td></tr>';}).join('')+'</tbody></table></div>'; if(sin.length>15) h+='<p class="hint">y '+(sin.length-15)+' más.</p>'; }
+  h+='</div></section>';
+  // conteo por mes
+  var porMes={}; S.reg.forEach(function(r){var m=r.f.slice(0,7);porMes[m]=porMes[m]||{R:0,'5':0};porMes[m][r.t]++;});
+  var ms=Object.keys(porMes).sort().slice(-12);
+  if(ms.length){
+    var mx=Math.max.apply(null,ms.map(function(m){return porMes[m].R+porMes[m]['5'];}));
+    h+='<section class="card"><div class="sechead"><div><h2>Registros por mes</h2><p class="sub">Últimos 12 meses con registros</p></div><div class="legend"><span class="chip"><i style="background:var(--series)"></i>Relatos</span><span class="chip"><i style="background:var(--warn)"></i>5XQ</span></div></div><div class="scroll"><table><tbody>'+
+      ms.map(function(m){var a=porMes[m].R,b=porMes[m]['5'];return '<tr><td style="width:130px">'+mesNombre(m)+'</td><td><div style="display:flex;height:14px;border-radius:0 4px 4px 0;overflow:hidden;width:'+Math.max(1,(a+b)/mx*100)+'%;min-width:2px"><i style="background:var(--series);flex:'+a+'"></i><i style="background:var(--warn);flex:'+b+'"></i></div></td><td class="r" style="width:150px">'+a+' relatos · '+b+' 5XQ</td></tr>';}).join('')+'</tbody></table></div></section>';
+  }
+  // lista
+  var q=norm(UI.regQ), lst=S.reg.filter(function(r){
+    if(UI.regTipo&&r.t!==UI.regTipo) return false;
+    if(UI.regInd==='_sin'&&r._i) return false; if(UI.regInd&&UI.regInd!=='_sin'&&r._i!==UI.regInd) return false;
+    if(q&&norm([r.ind,r.ruta,r.chofer,r.resp,r.causa,r.acc,r.pq1].join(' ')).indexOf(q)<0) return false; return true;
+  }).sort(function(a,b){return a.f<b.f?1:a.f>b.f?-1:0;});
+  h+='<section class="card"><div class="sechead"><div><h2>Registros</h2><p class="sub">'+lst.length+' de '+S.reg.length+'</p></div><div class="row">'+
+    '<select data-chg="regTipo" aria-label="Tipo"><option value="">Relatos y 5XQ</option><option value="R"'+(UI.regTipo==='R'?' selected':'')+'>Relatos</option><option value="5"'+(UI.regTipo==='5'?' selected':'')+'>5XQ</option></select>'+
+    '<select data-chg="regInd" aria-label="Indicador"><option value="">Todos los indicadores</option>'+S.ind.map(function(i){return '<option value="'+i.id+'"'+(UI.regInd===i.id?' selected':'')+'>'+esc(i.nombre)+'</option>';}).join('')+'<option value="_sin"'+(UI.regInd==='_sin'?' selected':'')+'>Sin gatillo</option></select>'+
+    '<input type="search" id="regQ" placeholder="Buscar ruta, chofer, causa…" value="'+esc(UI.regQ)+'" aria-label="Buscar"></div></div>'+
+    '<div class="scroll"><table class="reg"><thead><tr><th>Fecha</th><th>Tipo</th><th>Indicador</th><th>Ruta / chofer</th><th>Responsable</th><th>Causa raíz</th><th>Acción</th><th>Crónica</th></tr></thead><tbody>';
+  if(!lst.length) h+='<tr><td colspan="8" class="sub">Sin registros.</td></tr>';
+  lst.slice(0,UI.regN||100).forEach(function(r){var i=r._i?indById(r._i):null;h+='<tr><td class="num" style="white-space:nowrap">'+r.f+'</td><td>'+(r.t==='R'?'Relato':'5XQ')+'</td><td>'+esc(r.ind)+(i&&norm(i.nombre)!==norm(r.ind)?'<div class="extra">→ '+esc(i.nombre)+'</div>':'')+(r.a?'<div class="extra">'+esc(r.a)+'</div>':'')+'</td><td>'+esc(r.ruta)+(r.chofer?'<div class="extra">'+esc(r.chofer)+'</div>':'')+'</td><td>'+esc(r.resp)+'</td><td class="long">'+esc(r.causa||r.pq1)+'</td><td class="long">'+esc(r.acc)+'</td><td>'+esc(r.cron)+'</td></tr>';});
+  if(lst.length>(UI.regN||100)) h+='<tr><td colspan="8"><button type="button" data-act="regmas">Ver 100 más</button> <span class="extra">Se muestran '+(UI.regN||100)+' de '+lst.length+'</span></td></tr>';
+  h+='</tbody></table></div></section>';
+  return h;
+}
+
+/* ---------------- eventos ---------------- */
+function confirmar(cont,txt,act,data){
+  $(cont).innerHTML='<div class="msg" style="margin-top:10px"><span>'+esc(txt)+'</span><span class="row"><button type="button" data-act="cancelc" data-c="'+cont+'">No</button><button type="button" class="danger" data-act="'+act+'"'+Object.keys(data||{}).map(function(k){return ' data-'+k+'="'+esc(data[k])+'"';}).join('')+'>Sí, borrar</button></span></div>';
+}
+document.addEventListener('click',function(e){
+  var b=e.target.closest('[data-act]'); if(!b) { var tb=e.target.closest('.tabs button'); if(tb){UI.view=tb.dataset.view;guardarUI();render();} return; }
+  var a=b.dataset.act, id=b.dataset.id;
+  if(a==='flashx'){$('flash').innerHTML='';return;}
+  if(a==='clave'){ abrirClave(); return; }
+  if(a==='kok'||a==='kolvidar'){ setClave(a==='kok'?$('kin').value.trim():''); $('pop').hidden=true; DB.noKey=false; if(DB.ready) sync(); else pull(); return; }
+  if(a==='tdatos'||a==='tplan'||a==='tplanmes'||a==='texport'){
+    b.closest('details').open=false;
+    if(typeof XLSX==='undefined'){flash('crit','No se pudo cargar la librería de Excel (revisa la conexión).');return;}
+    if(a==='texport') exportar();
+    else if(a==='tdatos') XLSX.writeFile(plantillaDatos(),'Plantilla_Datos_CD_Bavaro.xlsx');
+    else if(a==='tplan') XLSX.writeFile(formatoPlan(false),'Plantilla_Plan_CD_Bavaro.xlsx');
+    else XLSX.writeFile(formatoPlan(true),'Plan_Analisis_CD_Bavaro_'+UI.mes+'.xlsx');
+    return;
+  }
+  if(a==='mes'){UI.mes=addMes(UI.mes,+b.dataset.k);render();return;}
+  if(a==='hoy'){UI.mes=hoyMes();render();return;}
+  if(a==='anio'){UI.anio+=+b.dataset.k;render();return;}
+  if(a==='gtipo'){UI.gtipo=b.dataset.t;guardarUI();render();return;}
+  if(a==='verind'){e.stopPropagation();UI.ind=id;UI.view='det';guardarUI();render();window.scrollTo(0,0);return;}
+  if(a==='editg'){abrirEditorG(id,b.dataset.m);return;}
+  if(a==='popx'){$('pop').hidden=true;return;}
+  if(a==='gfijar'||a==='gcopiar'){
+    var ind=indById(id), v;
+    if(a==='gcopiar') v=gatillo(ind,b.dataset.m).calc; else { v=parseVal($('gin').value,ind.unidad); if(v==null){ if(!$('gin').value.trim()){ delete (S.fijos[id]||{})[b.dataset.m]; } else { $('gerr').textContent='Escribe el gatillo como '+(ind.unidad==='Tiempo'?'1:05:46':ind.unidad==='Porcentaje'?'3.10%':'25.5')+'.'; return; } } }
+    if(v!=null) (S.fijos[id]=S.fijos[id]||{})[b.dataset.m]=v;
+    $('pop').hidden=true; invalidar(); guardar(); render(); return;
+  }
+  if(a==='gquitar'){delete (S.fijos[id]||{})[b.dataset.m]; $('pop').hidden=true; invalidar(); guardar(); render(); return;}
+  if(a==='dadd'){
+    var ind2=indById(id), fe=$('dFecha').value, v2=parseVal($('dValor').value,ind2.unidad);
+    if(!fe||v2==null){$('derr').textContent='Escribe la fecha y el valor (ej. '+(ind2.unidad==='Tiempo'?'1:05:46':ind2.unidad==='Porcentaje'?'3.1%':'25.5')+').';return;}
+    (S.datos[id]=S.datos[id]||{})[fe]={v:v2,o:'m'}; invalidar(); guardar(); render(); flash('ok','Dato del '+fechaCorta(fe)+' guardado: '+esc(fmt(v2,ind2.unidad))+'.'); return;
+  }
+  if(a==='ddel'){ if(S.datos[id]) delete S.datos[id][b.dataset.f]; invalidar(); guardar(); render(); return; }
+  if(a==='dborrarmes'){ var ii=indById(UI.datInd); confirmar('confirmD','¿Borrar '+(UI.datMes?'los datos de '+mesNombre(UI.datMes):'todos los datos')+' de '+ii.nombre+'?','dborrarok',{}); return; }
+  if(a==='dborrarok'){ var dd=S.datos[UI.datInd]||{}; Object.keys(dd).forEach(function(f){ if(!UI.datMes||f.slice(0,7)===UI.datMes) delete dd[f]; }); UI.datMes=''; invalidar(); guardar(); render(); return; }
+  if(a==='cancelc'){ $(b.dataset.c).innerHTML=''; return; }
+  if(a==='pegar'){ pegarDatos(); return; }
+  if(a==='regmas'){ UI.regN=(UI.regN||100)+100; render(); return; }
+  if(a==='vplan'){ UI.view='plan'; UI.planVer='mes'; guardarUI(); render(); return; }
+  if(a==='pver'){ UI.planVer=b.dataset.v; render(); return; }
+  if(a==='padd'||a==='paddall'){
+    UI.ppResp=$('ppResp').value.trim(); UI.ppLim=$('ppLim').value;
+    var items=a==='padd'?[[id,b.dataset.f,b.dataset.t]]:porPlanificar(UI.mes).map(function(x){return [x.i.id,x.d.f,x.d.lv==='R'?'R':'5'];});
+    items.forEach(function(x){S.plan.push(nuevoPlan(x[0],x[1],x[2],UI.ppResp,UI.ppLim,''));});
+    guardar(); render(); flash('ok',items.length+' análisis agregado'+(items.length>1?'s':'')+' al plan.'); return;
+  }
+  if(a==='pnew'){
+    var pf=$('pnF').value; if(!pf||!$('pnInd').value){ $('pnErr').textContent='Elige el indicador y el día del análisis.'; return; }
+    S.plan.push(nuevoPlan($('pnInd').value,pf,$('pnT').value,$('pnResp').value.trim(),$('pnLim').value,$('pnNota').value.trim()));
+    if(UI.planVer==='mes') UI.mes=pf.slice(0,7);
+    guardar(); render(); flash('ok','Análisis agregado al plan.'); return;
+  }
+  if(a==='pformato'){ if(typeof XLSX==='undefined'){flash('crit','No se pudo cargar la librería de Excel (revisa la conexión).');return;} XLSX.writeFile(formatoPlan(true),'Plan_Analisis_CD_Bavaro_'+UI.mes+'.xlsx'); return; }
+  if(a==='pdel'){ S.plan=S.plan.filter(function(p){return p.id!==b.dataset.pid;}); guardar(); render(); return; }
+  if(a==='iadd'){ var ni=nuevoInd(['Nuevo indicador','Distribución','Número','Mayor peor',2,3,5,'','Sí']); S.ind.push(ni); invalidar(); guardar(); render(); var inp=document.querySelector('input[data-id="'+ni.id+'"][data-f="nombre"]'); if(inp){inp.focus();inp.select();} return; }
+  if(a==='idel'){ var i3=indById(id), nd=Object.keys(S.datos[id]||{}).length; confirmar('confirmI','¿Eliminar "'+i3.nombre+'"'+(nd?' y sus '+nd+' datos':'')+'? Si solo quieres ocultarlo, desmarca "Activo".','idelok',{id:id}); window.scrollTo({top:0,behavior:'smooth'}); return; }
+  if(a==='idelok'){ S.ind=S.ind.filter(function(x){return x.id!==id;}); delete S.datos[id]; delete S.fijos[id]; S.plan=S.plan.filter(function(p){return p.ind!==id;}); invalidar(); guardar(); render(); return; }
+  if(a==='reset'){ confirmar('confirmR','Esto borra los indicadores, datos y gatillos de la base (para todos) y vuelve a los del Excel anterior. Los relatos, 5XQ y el plan se conservan.','resetok',{}); return; }
+  if(a==='resetok'){
+    var reg=S.reg, rm=S.regMeta, pl=S.plan.map(function(p){var i=indById(p.ind); if(i) p.indN=i.nombre; return p;});
+    S=desdeSeed(); S.reg=reg; S.regMeta=rm;
+    var byN={}; S.ind.forEach(function(i){byN[norm(i.nombre)]=i.id;});
+    S.plan=pl.filter(function(p){p.ind=byN[norm(p.indN)]; return !!p.ind;});
+    invalidar(); guardar(); render(); flash('ok','Se restauraron los datos del Excel anterior.'); return;
+  }
+});
+document.addEventListener('change',function(e){
+  var t=e.target;
+  if(t.dataset.chg==='ind'){UI.ind=t.value;guardarUI();render();return;}
+  if(t.dataset.chg==='datInd'){UI.datInd=t.value;UI.datMes='';render();return;}
+  if(t.dataset.chg==='datMes'){UI.datMes=t.value;render();return;}
+  if(t.dataset.chg==='tol'){S.cfg.tol=Math.max(0,Math.min(7,parseInt(t.value,10)||0));invalidar();guardar();return;}
+  if(t.dataset.chg==='regTipo'){UI.regTipo=t.value;UI.regN=100;render();return;}
+  if(t.dataset.chg==='regInd'){UI.regInd=t.value;UI.regN=100;render();return;}
+  if(t.dataset.pid&&t.dataset.pf){
+    var pl=S.plan.filter(function(p){return p.id===t.dataset.pid;})[0], pf=t.dataset.pf; if(!pl) return;
+    if(pf==='hecho') pl.hecho=t.checked; else pl[pf]=t.value.trim();
+    guardar(); if(pf==='hecho'||pf==='lim') render(); return;
+  }
+  if(t.dataset.chg==='pnT'){ $('pnRespL').hidden=t.value==='5'; return; }
+  if(t.dataset.chg==='alias'&&t.value){var p=t.dataset.k.split('|'), i=indById(t.value), nm=p.slice(1).join('|'); var amb=S.reg.some(function(r){return norm(r.ind)===norm(nm)&&norm(r.a)!==norm(p[0]);}); i.alias.push(amb&&p[0]?p[0]+'|'+nm:nm); invalidar(); guardar(); render(); flash('ok','"'+esc(nm)+'" quedó unido a '+esc(i.nombre)+'.'); return;}
+  if(t.dataset.f&&t.dataset.id){
+    var i2=indById(t.dataset.id), f=t.dataset.f; if(!i2) return;
+    if(f==='activo') i2.activo=t.checked;
+    else if(f==='alias') i2.alias=t.value.split(';').map(function(s){return s.trim();}).filter(Boolean);
+    else if(f==='k'||f==='margen'){var n=parseFloat(t.value); if(!isNaN(n)&&n>=0) i2[f]=n; else t.value=i2[f];}
+    else if(f==='meses'){var m=parseInt(t.value,10); if(m>=1) i2.meses=Math.min(24,m); else t.value=i2.meses;}
+    else if(f==='nombre'){var v=t.value.trim(); if(!v||S.ind.some(function(x){return x!==i2&&norm(x.nombre)===norm(v);})){t.value=i2.nombre; flash('crit','Ese nombre está vacío o ya existe.');} else i2.nombre=v;}
+    else if(f==='unidad'&&i2.unidad!==t.value){ i2.unidad=t.value; flash('warn','Cambiaste la unidad de '+esc(i2.nombre)+'. Los datos guardados no se convierten: revisa que estén en la nueva unidad.'); }
+    else i2[f]=t.value;
+    invalidar(); guardar(); return;
+  }
+});
+document.addEventListener('input',function(e){ if(e.target.id==='regQ'){UI.regQ=e.target.value; clearTimeout(window._rq); window._rq=setTimeout(function(){var pos=e.target.selectionStart;render();var q=$('regQ');if(q){q.focus();try{q.setSelectionRange(pos,pos);}catch(_){}}},250);} });
+document.addEventListener('keydown',function(e){
+  if(e.key==='Escape'&&!$('pop').hidden){$('pop').hidden=true;}
+  if(e.key==='Enter'&&e.target.id==='kin'){var bk=document.querySelector('[data-act="kok"]'); if(bk) bk.click();}
+  if(e.key==='Enter'&&e.target.id==='gin'){var b=document.querySelector('[data-act="gfijar"]'); if(b) b.click();}
+  if(e.key==='Enter'&&e.target.id==='dValor'){var b2=document.querySelector('[data-act="dadd"]'); if(b2) b2.click();}
+});
+$('pop').addEventListener('click',function(e){if(e.target===$('pop')) $('pop').hidden=true;});
+$('file').addEventListener('change',function(e){ if(e.target.files.length) procesar(Array.from(e.target.files)); e.target.value=''; });
+document.addEventListener('click',function(e){ var mn=document.querySelector('details.menu'); if(mn&&mn.open&&!mn.contains(e.target)) mn.open=false; });
+$('btnTheme').addEventListener('click',function(){
+  var r=document.documentElement, dark=r.dataset.theme?r.dataset.theme==='dark':matchMedia('(prefers-color-scheme: dark)').matches;
+  r.dataset.theme=dark?'light':'dark'; try{localStorage.setItem('gatillos-bvr-tema',r.dataset.theme);}catch(_){}
+  if(UI.view==='det') dibujarChart();
+});
+var dz=0;
+window.addEventListener('dragenter',function(e){e.preventDefault();dz++;document.body.classList.add('dragging');});
+window.addEventListener('dragleave',function(){if(--dz<=0){dz=0;document.body.classList.remove('dragging');}});
+window.addEventListener('dragover',function(e){e.preventDefault();});
+window.addEventListener('drop',function(e){e.preventDefault();dz=0;document.body.classList.remove('dragging'); if(e.dataTransfer.files.length) procesar(Array.from(e.dataTransfer.files));});
+window.addEventListener('resize',function(){clearTimeout(window._rz);window._rz=setTimeout(function(){if(UI.view==='det')dibujarChart();},150);});
+
+/* ---------------- inicio ---------------- */
+try{var tm=localStorage.getItem('gatillos-bvr-tema'); if(tm) document.documentElement.dataset.theme=tm;}catch(_){}
+cargar();
+try{var u=JSON.parse(localStorage.getItem(KEYUI)||'null'); if(u){UI.view=u.view||'mes';UI.ind=u.ind;UI.gtipo=u.gtipo||'R';}}catch(_){}
+var qs=new URLSearchParams(location.search); if(/^\d{4}-\d{2}$/.test(qs.get('mes')||'')) UI.mes=qs.get('mes');
+UI.mes=UI.mes||hoyMes(); UI.anio=+UI.mes.slice(0,4);
+if(typeof XLSX==='undefined') flash('crit','No se pudo cargar la librería para leer Excel (revisa la conexión). Lo demás funciona.',false);
+status(); render(); pull();
+</script>
+</body>
+</html>

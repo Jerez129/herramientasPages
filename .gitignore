@@ -1,0 +1,8 @@
+*.xlsx
+*.xls
+*.csv
+!Plantilla_Gatillos_CD_Bavaro.xlsx
+!Plantilla_Plan_CD_Bavaro.xlsx
+src.html
+# El Worker (gatillos-api) se publica con wrangler, no va en el repositorio de la página.
+gatillos-api/

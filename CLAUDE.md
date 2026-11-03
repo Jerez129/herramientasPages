@@ -1,0 +1,93 @@
+# Gatillos CD Bávaro (herramientasPages)
+
+Dashboard de una sola página que reemplaza el Excel "Herramientas de gestión CD Bavaro.xlsx" (AB InBev RD, DPO). Calcula el **gatillo** de cada indicador por mes y cruza los días que lo pasaron con los **Relatos de Anomalía** y **5XQ** (5 porqués) registrados en Microsoft Forms.
+
+El usuario es analista de productividad del CD Bávaro y estudiante de Ingeniería de Sistemas: explica los cambios con lo básico, en español.
+
+## Archivos
+
+| Archivo | Para qué |
+|---|---|
+| `index.html` | La página completa (HTML + CSS + JS en un solo archivo). Se publica en GitHub Pages como los otros tableros (owdPages, accionesPages, montacargasPages). |
+| `Plantilla_Gatillos_CD_Bavaro.xlsx` | Formato para subir datos. Hojas: Instrucciones, Indicadores, Datos, Gatillos fijos (la hoja Plan es opcional; la trae la plantilla que descarga la página). |
+| `Plantilla_Plan_CD_Bavaro.xlsx` | Formato vacío del plan (Instrucciones, Plan, Listas) con listas desplegables. Lo generó un script de Python con la librería estándar; la página genera uno igual (sin listas desplegables) desde "Descargar plantillas". |
+| `gatillos-api/` | Worker de Cloudflare + D1 (`gatillos-db`). No va en el repositorio (`.gitignore`). Publicar: `npx wrangler deploy` dentro de la carpeta. |
+
+GitHub: `Jerez129/herramientasPages`, Pages desde `main` / raíz → https://jerez129.github.io/herramientasPages/
+
+## Base de datos (Worker `https://gatillos-api.japf20092004.workers.dev`)
+
+- Tablas: `datos(ind,f,v,o)`, `regs(t,data)`, `plan(id,data)`, `config(key,value)` con `ind`, `fijos`, `cfg`, `regMeta`. Esquema en `gatillos-api/schema.sql`.
+- Rutas: `GET /api/state`; `PUT /api/config/:key`; `POST /api/datos {put,del}`; `POST /api/regs/:t {rows,first}` (first borra los de ese tipo); `POST /api/plan {put,del}`.
+- Leer y guardar son libres mientras el Worker no tenga el secreto `EDIT_KEY` (como acciones-api). Con `EDIT_KEY`, la página pide la clave (botón de estado de la base en el encabezado) y la guarda en localStorage `gatillos-bvr-clave`.
+- En la página: `guardar()` guarda local y programa `sync()`, que compara `foto(S)` con `DB.snap` (lo que está en la base) y manda solo lo que cambió. `guardarUI()` es para cambios de vista (no van a la base). `pull()` al abrir: si la base está vacía sube lo local; si hay cambios locales sin subir (`gatillos-bvr-pend`) los sube (lo local gana); si no, toma la base.
+- D1 permite 100 valores por consulta: el Worker arma INSERT de varias filas (`multi`) y la página manda en partes.
+
+La constante `SEED` dentro de `index.html` (una línea JSON larga) son los datos iniciales migrados del Excel anterior: `{ind:[...], datos:[[indicador, fecha, valor]], fijos:[[indicador, "AAAA-MM", gatillo]]}`. No edites esa línea a mano salvo para regenerarla.
+
+## Regla del gatillo (igual que las hojas mensuales del Excel)
+
+- Gatillo relato = promedio ± k × desviación estándar **de muestra** (STDEV) de los datos de los `meses` anteriores (por defecto 3: el gatillo de noviembre usa agosto–octubre).
+  - "Mayor peor" suma, "Menor peor" resta. k por indicador (1 Almacén, 2 Distribución en el Excel).
+  - Se necesitan al menos 2 datos.
+- Gatillo 5XQ (matinal / cambio de turno) = gatillo relato ajustado `margen`% hacia lo más exigente (5%). El Excel hacía ×0.95 siempre; aquí depende del sentido.
+- Un gatillo fijo (`S.fijos[id]["AAAA-MM"]`) manda sobre el cálculo.
+- Un día "pasa" si: Mayor peor → valor > gatillo; Menor peor → valor < gatillo. Nivel `R` (relato) o `5` (solo 5XQ).
+- Un día está analizado si hay un registro del mismo indicador con fecha entre el día y `S.cfg.tol` días después. Nivel R exige relato; nivel 5 acepta relato o 5XQ.
+- Verificado: con los datos de la hoja Septiembre, el cálculo da exactamente los gatillos de septiembre de "2. Indicadores".
+
+## Unidades internas
+
+- Tiempo: fracción de día (como Excel). `fmt()` lo muestra h:mm:ss.
+- Porcentaje: decimal (0.031 = 3.1%). `parseVal()` acepta "3.1%", "0.031" o "3.1".
+- Número: tal cual.
+
+## Estado (`S`, guardado en localStorage `gatillos-bvr-v1`)
+
+```
+S = { v:1,
+  ind:   [{id, nombre, area, unidad, sentido, k, meses, margen, alias:[...], activo}],
+  datos: { [indId]: { "AAAA-MM-DD": {v, o} } },   // o: 'x' Excel anterior, 'p' plantilla, 'm' escrito en la página
+  fijos: { [indId]: { "AAAA-MM": valor } },
+  reg:   [{t:'R'|'5', f, a, ind, resp, chofer, ruta, res, pq1, causa, acc, cron}],  // de los Forms
+  regMeta: { R:{archivo,cargado,n,desde,hasta}, '5':{...} },
+  plan:  [{id, ind, indN, f, t:'R'|'5', resp, lim, nota, hecho}],          // Plan de análisis
+  cfg: { tol } }
+```
+
+## Plan de análisis (pestaña "Plan de análisis", `vPlan`)
+
+- "Por planificar" = días del mes con estado `pend`/`parcial` en `resumen()` que no están en `S.plan` (clave indicador + día). Se agregan uno a uno o todos, con responsable y fecha límite.
+- Estado (`planEstado`): `forms` si `regsDia()` trae el análisis (relato exige relato; 5XQ acepta cualquiera), `hecho` si se marcó a mano, `venc` si pasó `lim`, si no `pend`.
+- `indN` guarda el nombre del indicador para reubicar el plan al volver a los datos del Excel anterior (los ids cambian).
+- Solo los relatos llevan responsable; en los 5XQ `resp` queda vacío (`nuevoPlan`).
+- Hoja **Plan**: con hoja Indicadores (respaldo completo) reemplaza el plan; sola (formato del plan) agrega o actualiza por indicador + día + tipo.
+- Menú "Descargar plantillas": `plantillaDatos()` (sin hoja Indicadores, así que al cargarla solo agrega), `formatoPlan(conDias)`, `exportar()` (respaldo completo).
+
+`GC` (caché de gatillos) y `RC` (índice de registros por indicador) se limpian con `invalidar()` después de cualquier cambio.
+
+## Carga de archivos (`procesar`)
+
+- Si el libro tiene hoja **Indicadores** → reemplaza catálogo, datos y gatillos fijos. Si solo trae **Datos** → agrega/actualiza.
+- Si no, se trata como exportación de Forms: busca la fila de encabezados con "Indicador", detecta columnas por nombre (`cargarForms`), filtra centro Bávaro, y reemplaza todos los registros de ese tipo. Es 5XQ si el nombre del archivo/hoja dice 5XQ o hay columnas de supervisor/chofer.
+- Unión Forms ↔ indicador: `alias` del catálogo. `Área|Nombre` para nombres repetidos en varias áreas (ej. "Distribución|Roturas").
+- Las columnas de los Forms se probaron con archivos armados a partir del Excel, **no con una exportación real**. Si una exportación real falla, ajusta las expresiones de `cargarForms`.
+
+## Convenciones (iguales a los otros tableros del usuario)
+
+- Un solo archivo, sin build. SheetJS 0.18.5 desde cdnjs. Fuente IBM Plex Sans / Condensed.
+- Colores como tokens en `:root`, con modo oscuro (`prefers-color-scheme` y `data-theme`). Estados: `--good`, `--warn`, `--crit`.
+- Todo acceso a localStorage va en try/catch.
+- Sin `alert`/`confirm`: las confirmaciones son en línea (`confirmar()`).
+- Textos en español, frases cortas, sin tecnicismos.
+
+## Probar
+
+Abre `index.html` con doble clic (sin base: el Worker solo acepta GitHub Pages y localhost). Para probar con la base: `python -m http.server 8765` y abrir `http://127.0.0.1:8765/`; ojo, eso escribe en la base real. `?mes=2026-06` abre en ese mes. Con Playwright: interceptar `cdnjs` si no hay red y servir `xlsx.full.min.js` local.
+
+## Pendiente / conocido
+
+- En el Excel anterior los valores se ordenaron sin mover sus fechas: los datos con origen "Excel anterior" (junio–agosto 2026) tienen el conjunto de valores correcto pero el día no es confiable. Se marcan "aprox.".
+- Faltan datos diarios de septiembre y octubre 2026 para el gatillo de noviembre.
+- Crítica y No cargado cambiaron de unidad en julio 2026 (de % a HL); los gatillos fijos de feb–jun quedaron en %.
+- Si se quiere clave de edición: `npx wrangler secret put EDIT_KEY` dentro de `gatillos-api/`.
