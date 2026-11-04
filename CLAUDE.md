@@ -20,7 +20,9 @@ GitHub: `Jerez129/herramientasPages`, Pages desde `main` / raíz → https://jer
 - Tablas: `datos(ind,f,v,o)`, `regs(t,data)`, `plan(id,data)`, `config(key,value)` con `ind`, `fijos`, `cfg`, `regMeta`. Esquema en `gatillos-api/schema.sql`.
 - Rutas: `GET /api/state`; `PUT /api/config/:key`; `POST /api/datos {put,del}`; `POST /api/regs/:t {rows,first}` (first borra los de ese tipo); `POST /api/plan {put,del}`.
 - Leer es libre. Guardar pide el secreto `EDIT_KEY` (configurado el 2026-11-03; solo el usuario conoce la clave). La página pide la clave (botón de estado de la base en el encabezado) y la guarda en localStorage `gatillos-bvr-clave`.
-- En la página: `guardar()` guarda local y programa `sync()`, que compara `foto(S)` con `DB.snap` (lo que está en la base) y manda solo lo que cambió. `guardarUI()` es para cambios de vista (no van a la base). `pull()` al abrir: si la base está vacía sube lo local; si hay cambios locales sin subir (`gatillos-bvr-pend`) los sube (lo local gana); si no, toma la base.
+- En la página: `guardar()` guarda local y programa `sync()`, que compara `foto(S)` con `DB.snap` (lo que está en la base) y manda solo lo que cambió. `guardarUI()` es para cambios de vista (no van a la base). `pull()` al abrir: si la base está vacía sube lo local; si hay cambios locales sin subir (`gatillos-bvr-pend`) hace `mezclar()` (en un mismo dato gana lo local, pero lo que solo está en la base se conserva) y sube; si no, toma la base.
+- Se guarda en D1 todo `S`: catálogo, datos, gatillos fijos, ajustes, registros y plan (todos sus campos). `foto()` compara los registros completos, no solo `regMeta`. Solo en el navegador: pestaña/indicador en pantalla, tema, clave y la marca de pendientes. De los Forms solo se guardan los campos de `cargarForms` (1.er porqué, causa y acción recortados); no el archivo completo.
+- Probar sin tocar la base real: `npx.cmd wrangler dev --port 8787 --ip 127.0.0.1 --persist-to <carpeta>` dentro de `gatillos-api/` (con `wrangler d1 execute gatillos-db --local --persist-to <carpeta> --file schema.sql` antes; `--var EDIT_KEY:algo` para probar la clave) y abrir la página en `http://127.0.0.1:8765/?api=http://127.0.0.1:8787`.
 - D1 permite 100 valores por consulta: el Worker arma INSERT de varias filas (`multi`) y la página manda en partes.
 
 La constante `SEED` dentro de `index.html` (una línea JSON larga) son los datos iniciales migrados del Excel anterior: `{ind:[...], datos:[[indicador, fecha, valor]], fijos:[[indicador, "AAAA-MM", gatillo]]}`. No edites esa línea a mano salvo para regenerarla.
@@ -56,6 +58,10 @@ S = { v:1,
   plan:  [{id, ind, indN, f, t:'R'|'5', resp, lim, nota, hecho, resDia, ruta, nombre, resInd}],   // Plan de análisis
   cfg: { tol } }
 ```
+
+## Adherencia al plan (pestaña "Adherencia al plan", `vAdh`)
+
+- Adherencia = hechos / planificados, solo con lo guardado en `S.plan` (`planCuenta`), separada en relatos y 5XQ; por indicador, por responsable (relatos) y mes a mes. "Hecho" = en Forms o marcado a mano. Las filas `auto` de `planRealizados` se cuentan aparte como "fuera del plan" y no afectan el porcentaje. Vencidos depende de que el análisis tenga `lim`.
 
 ## Plan de análisis (pestaña "Plan de análisis", `vPlan`)
 

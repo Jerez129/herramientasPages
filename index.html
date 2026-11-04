@@ -233,6 +233,7 @@ details summary{cursor:pointer;color:var(--accent);font-weight:500;width:max-con
   <nav class="tabs" role="tablist" aria-label="Vista">
     <button type="button" role="tab" data-view="mes">Mes</button>
     <button type="button" role="tab" data-view="plan">Plan de análisis</button>
+    <button type="button" role="tab" data-view="adh">Adherencia al plan</button>
     <button type="button" role="tab" data-view="gat">Gatillos del año</button>
     <button type="button" role="tab" data-view="det">Detalle por indicador</button>
     <button type="button" role="tab" data-view="dat">Datos</button>
@@ -378,7 +379,8 @@ function foto(s){
   for(var id in s.datos) for(var f in s.datos[id]) d[id+'|'+f]=s.datos[id][f].v+'|'+(s.datos[id][f].o||'');
   s.plan.forEach(function(x){p[x.id]=JSON.stringify(planLimpio(x));});
   return {ind:JSON.stringify(s.ind), fijos:JSON.stringify(s.fijos), cfg:JSON.stringify(s.cfg), regMeta:JSON.stringify(s.regMeta),
-    R:JSON.stringify((s.regMeta||{}).R||null), '5':JSON.stringify((s.regMeta||{})['5']||null), d:d, p:p};
+    // Los registros se comparan completos: una respuesta corregida debe llegar a la base aunque el resumen (regMeta) no cambie.
+    R:JSON.stringify(s.reg.filter(function(r){return r.t==='R';}).map(regLimpio)), '5':JSON.stringify(s.reg.filter(function(r){return r.t==='5';}).map(regLimpio)), d:d, p:p};
 }
 function trozos(a,n){var o=[]; for(var i=0;i<a.length;i+=n) o.push(a.slice(i,i+n)); return o;}
 function sync(){
@@ -412,6 +414,23 @@ function sync(){
     });
   })();
 }
+/* Cambios locales sin subir: en un mismo dato gana lo local, pero lo que solo está en la base se conserva.
+   Así nadie borra de la base lo que otra persona agregó mientras este navegador estaba sin clave o sin conexión.
+   Un borrado local sin subir vuelve a aparecer: se prefiere eso a perder datos. */
+function mezclar(L,D){
+  var nombres={}; L.ind.forEach(function(i){nombres[norm(i.nombre)]=1;});
+  D.ind.forEach(function(i){ if(!indById(i.id)&&!nombres[norm(i.nombre)]) L.ind.push(i); });
+  for(var id in D.datos) for(var f in D.datos[id]) if(!(L.datos[id]&&L.datos[id][f])) (L.datos[id]=L.datos[id]||{})[f]=D.datos[id][f];
+  for(var id2 in D.fijos) for(var m in D.fijos[id2]) if(!(L.fijos[id2]&&m in L.fijos[id2])) (L.fijos[id2]=L.fijos[id2]||{})[m]=D.fijos[id2][m];
+  var ya={}; L.plan.forEach(function(p){ya[p.id]=1;});
+  D.plan.forEach(function(p){ if(!ya[p.id]) L.plan.push(p); });
+  var clave=function(r){return r.t+'|'+(r.id||JSON.stringify(regLimpio(r)))+'|'+r.f;}, hay={}; L.reg.forEach(function(r){hay[clave(r)]=1;});
+  D.reg.forEach(function(r){ if(!hay[clave(r)]) L.reg.push(r); });
+  ['R','5'].forEach(function(t){
+    var fs=L.reg.filter(function(r){return r.t===t;}).map(function(r){return r.f;}).sort(), base=L.regMeta[t]||D.regMeta[t];
+    if(fs.length&&base) L.regMeta[t]={archivo:base.archivo,cargado:base.cargado,n:fs.length,desde:fs[0],hasta:fs[fs.length-1]};
+  });
+}
 function pull(){
   setSync('busy','Conectando con la base…');
   api('GET','/api/state').then(function(st){
@@ -420,7 +439,7 @@ function pull(){
     (st.datos||[]).forEach(function(r){(sdb.datos[r[0]]=sdb.datos[r[0]]||{})[r[1]]={v:r[2],o:r[3]||''};});
     DB.snap=foto(sdb); DB.ready=true;
     if(!c.ind){ setSync('busy','Subiendo los datos a la base…'); sync(); return; }   // base vacía: se sube lo de este navegador
-    if(getPend()){ sync(); return; }                                                    // cambios de este navegador sin subir
+    if(getPend()){ mezclar(S,sdb); invalidar(); render(); sync(); return; }             // cambios de este navegador sin subir
     S=sdb; invalidar(); guardarLocal(); render(); setSync('ok','Conectado a la base');
   }).catch(function(){ setSync('err','Sin conexión con la base · los cambios quedan en este navegador'); });
 }
@@ -751,7 +770,7 @@ function fuenteTxt(ind,g){
 
 function render(){
   document.querySelectorAll('.tabs button').forEach(function(b){b.setAttribute('aria-selected',b.dataset.view===UI.view?'true':'false');});
-  var f={mes:vMes,plan:vPlan,gat:vGat,det:vDet,dat:vDat,ind:vInd,reg:vReg}[UI.view]||vMes;
+  var f={mes:vMes,plan:vPlan,adh:vAdh,gat:vGat,det:vDet,dat:vDat,ind:vInd,reg:vReg}[UI.view]||vMes;
   $('view').innerHTML=f();
   if(UI.view==='det') dibujarChart();
 }
@@ -940,6 +959,52 @@ function vPlan(){
       '<td>'+est+'</td><td class="c"><input type="checkbox" data-pid="'+p.id+'" data-pf="hecho"'+(e==='forms'||p.hecho?' checked':'')+(e==='forms'?' disabled':'')+' aria-label="Hecho"></td>'+
       '<td><button type="button" class="rm" data-act="pdel" data-pid="'+p.id+'" aria-label="Quitar del plan">×</button></td></tr>';
   });
+  h+='</tbody></table></div></section>';
+  return h;
+}
+
+/* ----- Vista: Adherencia al plan ----- */
+/* Adherencia = hechos / planificados, solo con lo guardado en el plan. Lo realizado sin estar planificado (planRealizados) se cuenta aparte. */
+function planCuenta(mes){
+  var nuevo=function(){return {plan:0,hecho:0,marcado:0,venc:0,pend:0,fuera:0};}, T={R:nuevo(),'5':nuevo()}, porInd={}, porResp={};
+  S.plan.forEach(function(p){
+    if(p.f.slice(0,7)!==mes||!indById(p.ind)) return;
+    var e=planEstado(p), suma=function(c){ c.plan++; if(e==='forms'||e==='hecho') c.hecho++; if(e==='hecho') c.marcado++; if(e==='venc') c.venc++; if(e==='pend') c.pend++; };
+    suma(T[p.t]);
+    var pi=porInd[p.ind]=porInd[p.ind]||{R:nuevo(),'5':nuevo()}; suma(pi[p.t]);
+    if(p.t==='R'){ var k=(p.resp||'').trim()||'Sin responsable'; suma(porResp[k]=porResp[k]||nuevo()); }
+  });
+  planRealizados(mes).forEach(function(p){T[p.t].fuera++;});
+  return {T:T,porInd:porInd,porResp:porResp};
+}
+function vAdh(){
+  var C=planCuenta(UI.mes), T=C.T;
+  var celda=function(c){ if(!c.plan) return '<span class="extra">Sin plan</span>'; var p=c.hecho/c.plan;
+    return meter(p)+'<span class="extra"><b class="num" style="color:var(--ink)">'+pctTxt(p)+'</b> · '+c.hecho+' de '+c.plan+'</span>'; };
+  var venc=function(n){ return n?'<span style="color:var(--crit);font-weight:600">'+n+'</span>':'0'; };
+  var heroe=function(lbl,c,tipo){ var p=c.plan?c.hecho/c.plan:null;
+    return '<div class="card hero"><span class="lbl">'+lbl+'</span><div class="big">'+pctTxt(p)+'</div>'+meter(p)+
+      '<div class="facts"><span>'+(c.plan?'<b class="num">'+c.hecho+'</b> de <b class="num">'+c.plan+'</b> planificados están hechos':'Nada planificado en este mes')+'</span>'+
+      (c.marcado?'<span>'+c.marcado+' marcado'+(c.marcado>1?'s':'')+' a mano, aún sin Forms</span>':'')+'<span>'+c.fuera+' '+tipo+' hechos fuera del plan</span></div></div>'; };
+  var h='<div class="sechead">'+monthbar()+'</div>';
+  h+='<section class="month dos">'+heroe('Adherencia de relatos',T.R,'relatos')+heroe('Adherencia de 5XQ',T['5'],'5XQ')+
+    '<div class="tiles"><div class="tile"><span class="lbl">Vencidos</span><b style="color:'+(T.R.venc+T['5'].venc?'var(--crit)':'inherit')+'">'+(T.R.venc+T['5'].venc)+'</b><small>'+T.R.venc+' relatos · '+T['5'].venc+' 5XQ</small></div>'+
+    '<div class="tile"><span class="lbl">Pendientes</span><b>'+(T.R.pend+T['5'].pend)+'</b><small>'+T.R.pend+' relatos · '+T['5'].pend+' 5XQ, a tiempo o sin fecha</small></div></div></section>';
+  var ids=activos().filter(function(i){return C.porInd[i.id];});
+  h+='<section class="card"><div class="sechead"><div><h2>Por indicador</h2><p class="sub">Solo cuenta lo planificado. Los análisis hechos fuera del plan no suben ni bajan la adherencia.</p></div></div><div class="scroll"><table><thead><tr><th>Indicador</th><th class="bar">Relatos</th><th class="bar">5XQ</th><th class="r">Vencidos</th></tr></thead><tbody>';
+  if(!ids.length) h+='<tr><td colspan="4" class="sub">Nada planificado en este mes.</td></tr>';
+  ids.forEach(function(i){var x=C.porInd[i.id]; h+='<tr class="click" data-act="verind" data-id="'+i.id+'"><td class="name"><button type="button" data-act="verind" data-id="'+i.id+'">'+esc(i.nombre)+'</button><div class="extra">'+esc(i.area)+'</div></td><td class="bar">'+celda(x.R)+'</td><td class="bar">'+celda(x['5'])+'</td><td class="r">'+venc(x.R.venc+x['5'].venc)+'</td></tr>';});
+  h+='</tbody></table></div></section>';
+  var rs=Object.keys(C.porResp).sort(function(a,b){return C.porResp[b].plan-C.porResp[a].plan||(a<b?-1:1);});
+  h+='<section class="card"><div class="sechead"><div><h2>Relatos por responsable</h2></div></div><div class="scroll"><table><thead><tr><th>Responsable</th><th class="bar">Adherencia</th><th class="r">Pendientes</th><th class="r">Vencidos</th></tr></thead><tbody>';
+  if(!rs.length) h+='<tr><td colspan="4" class="sub">Sin relatos planificados en este mes.</td></tr>';
+  rs.forEach(function(k){var c=C.porResp[k]; h+='<tr><td>'+esc(k)+'</td><td class="bar">'+celda(c)+'</td><td class="r">'+c.pend+'</td><td class="r">'+venc(c.venc)+'</td></tr>';});
+  h+='</tbody></table></div></section>';
+  var y=UI.mes.slice(0,4);
+  h+='<section class="card"><div class="sechead"><div><h2>Mes a mes, '+y+'</h2><p class="sub">Clic en un mes para verlo arriba.</p></div></div><div class="scroll"><table><thead><tr><th>Mes</th><th class="bar">Relatos</th><th class="bar">5XQ</th><th class="r">Vencidos</th><th class="r">Hechos fuera del plan<small>relatos · 5XQ</small></th></tr></thead><tbody>';
+  for(var m=1;m<=12;m++){ var mm=y+'-'+pad(m), t=planCuenta(mm).T;
+    if(!(t.R.plan+t['5'].plan+t.R.fuera+t['5'].fuera)) continue;
+    h+='<tr class="click" data-act="adhmes" data-m="'+mm+'"'+(mm===UI.mes?' style="font-weight:600"':'')+'><td class="name"><button type="button" data-act="adhmes" data-m="'+mm+'">'+esc(mesNombre(mm))+'</button></td><td class="bar">'+celda(t.R)+'</td><td class="bar">'+celda(t['5'])+'</td><td class="r">'+venc(t.R.venc+t['5'].venc)+'</td><td class="r">'+t.R.fuera+' · '+t['5'].fuera+'</td></tr>'; }
   h+='</tbody></table></div></section>';
   return h;
 }
@@ -1182,6 +1247,7 @@ document.addEventListener('click',function(e){
   if(a==='cancelc'){ $(b.dataset.c).innerHTML=''; return; }
   if(a==='pegar'){ pegarDatos(); return; }
   if(a==='regmas'){ UI.regN=(UI.regN||100)+100; render(); return; }
+  if(a==='adhmes'){ e.stopPropagation(); UI.mes=b.dataset.m; render(); window.scrollTo(0,0); return; }
   if(a==='vplan'){ UI.view='plan'; UI.planVer='mes'; guardarUI(); render(); return; }
   if(a==='pver'){ UI.planVer=b.dataset.v; render(); return; }
   if(a==='padd'||a==='paddall'){
