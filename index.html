@@ -371,7 +371,7 @@ function api(method,path,body){
     .then(function(r){ if(!r.ok){var e=new Error('HTTP '+r.status); e.status=r.status; throw e;} return r.json(); });
 }
 function setSync(st,txt){var e=$('sync'); if(e){e.textContent=txt; e.parentNode.dataset.st=st;}}
-function planLimpio(x){return {id:x.id,ind:x.ind,indN:x.indN||'',f:x.f,t:x.t,resp:x.resp||'',lim:x.lim||'',nota:x.nota||'',hecho:!!x.hecho,resDia:x.resDia||'',ruta:x.ruta||'',nombre:x.nombre||'',resInd:x.resInd||''};}
+function planLimpio(x){return {id:x.id,ind:x.ind,indN:x.indN||'',f:x.f,t:x.t,resp:x.resp||'',lim:x.lim||'',nota:x.nota||'',hecho:!!x.hecho,resDia:x.resDia||'',ruta:x.ruta||'',nombre:x.nombre||'',resInd:x.resInd||'',a:x.a||'',regKey:x.regKey||''};}
 function regLimpio(r){var o={}; for(var k in r) if(k.charAt(0)!=='_') o[k]=r[k]; return o;}
 /* Lo que se compara con la base: textos por sección, y por fila en datos y plan. */
 function foto(s){
@@ -483,15 +483,16 @@ function aliasSet(ind){
   return {plain:a, area:pl};
 }
 var RC=null;
+function regClave(r){return r.t+'|'+(r.id||JSON.stringify([r.ind,r.resp,r.chofer,r.ruta]))+'|'+r.f;}
 function regIndex(){
   if(RC) return RC;
-  RC={porInd:{}, sinInd:{}};
+  RC={porInd:{}, sinInd:{}, claves:{}};
   var sets=S.ind.map(function(i){return [i,aliasSet(i)];});
   S.reg.forEach(function(r){
     var n=norm(r.ind), na=norm((r.a||'')+'|'+r.ind), hit=null;
     for(var j=0;j<sets.length&&!hit;j++) if(sets[j][1].area[na]) hit=sets[j][0];
     for(j=0;j<sets.length&&!hit;j++) if(sets[j][1].plain[n]) hit=sets[j][0];
-    r._i=hit?hit.id:null;
+    r._i=hit?hit.id:null; RC.claves[regClave(r)]=r;
     if(hit){ var m=RC.porInd[hit.id]=RC.porInd[hit.id]||{}; (m[r.f]=m[r.f]||[]).push(r); }
     else { var key=(r.a||'')+'|'+r.ind; RC.sinInd[key]=(RC.sinInd[key]||0)+1; }
   });
@@ -549,7 +550,7 @@ async function procesar(files){
       else { var r=cargarForms(wb,f.name); if(r.err) errs.push(r.err); else msgs.push(r.msg); }
     }catch(e){ errs.push(f.name+': no se pudo leer ('+(e&&e.message||e)+').'); }
   }
-  invalidar(); guardar(); render();
+  invalidar(); planDesdeRegs(); invalidar(); guardar(); render();
   if(errs.length) flash('crit','<b>Revisa:</b><ul>'+errs.map(function(e){return '<li>'+esc(e)+'</li>';}).join('')+'</ul>'+(msgs.length?'<p>'+msgs.map(esc).join('<br>')+'</p>':''),true);
   else if(msgs.length) flash('ok',msgs.map(esc).join('<br>'),true);
 }
@@ -596,7 +597,7 @@ function cargarPlantilla(wb,nombre){
     filas(wsP).slice(1).forEach(function(r){
       if(r[0]==null||!String(r[0]).trim()) return;
       var ind=byN[norm(r[0])], fe=parseFecha(r[1]);
-      if(!ind){ sinP[r[0]]=1; return; }
+      if(!ind){ if(!/sin gatillo/i.test(String(r[5]||''))) sinP[r[0]]=1; return; }   // los de indicadores sin gatillo se vuelven a crear desde los Forms
       if(!fe){ omit++; return; }
       var p=nuevoPlan(ind.id,fe,/5/.test(String(r[2]||''))?'5':'R',String(r[3]||'').trim(),parseFecha(r[4])||'',String(r[5]||'').trim(),
         {resDia:resTxt(r[7],ind),ruta:String(r[8]==null?'':r[8]).trim(),nombre:String(r[9]==null?'':r[9]).trim(),resInd:resTxt(r[10],ind)});
@@ -740,7 +741,7 @@ function exportar(){
   w=XLSX.utils.aoa_to_sheet(F); for(r=1;r<F.length;r++){var c=XLSX.utils.encode_cell({r:r,c:2}); if(w[c]) w[c].z=ff[r-1];}
   w['!cols']=[{wch:28},{wch:10},{wch:14}]; XLSX.utils.book_append_sheet(wb,w,'Gatillos fijos');
   var P=[PLAN_COLS];
-  S.plan.forEach(function(p){var i=indById(p.ind); if(i) P.push([i.nombre,fechaXL(p.f),p.t==='R'?'Relato':'5XQ',p.t==='R'?p.resp:'',fechaXL(p.lim),p.nota,p.hecho?'Sí':'No',p.t==='R'?p.resDia||datoDia(p):'',p.t==='R'?p.ruta||'':'',p.nombre||nombreForms(p),p.resInd||'']);});
+  S.plan.forEach(function(p){var i=indById(p.ind); if(planValido(p)) P.push([i?i.nombre:p.indN,fechaXL(p.f),p.t==='R'?'Relato':'5XQ',p.t==='R'?p.resp:'',fechaXL(p.lim),p.nota,p.hecho?'Sí':'No',p.t==='R'?p.resDia||datoDia(p):'',p.t==='R'?p.ruta||'':'',p.nombre||nombreForms(p),p.resInd||'']);});
   XLSX.utils.book_append_sheet(wb,hojaPlan(P),'Plan');
   XLSX.writeFile(wb,'Plantilla_Gatillos_CD_Bavaro_'+ymd(new Date())+'.xlsx');
 }
@@ -818,6 +819,7 @@ function vMes(){
 /* ----- Vista: Plan de análisis ----- */
 /* Relatos y 5XQ por hacer. Un análisis queda hecho cuando aparece en los Forms (misma regla que la vista Mes: relato exige relato; 5XQ acepta cualquiera) o si se marca a mano. */
 function planEstado(p){
+  if(p.regKey&&regIndex().claves[p.regKey]) return 'forms';
   var ind=indById(p.ind);
   if(ind&&regsDia(ind,p.f).some(function(r){return p.t==='5'||r.t==='R';})) return 'forms';
   if(p.hecho) return 'hecho';
@@ -874,29 +876,46 @@ function formatoPlan(conDias){
 }
 /* Días del mes que pasaron un gatillo, sin análisis en los Forms y que no están en el plan */
 function porPlanificar(mes){
-  var ya={}, out=[]; S.plan.forEach(function(p){ya[p.ind+'|'+p.f]=1;});
-  activos().forEach(function(i){ var r=resumen(i,mes); r.dias.forEach(function(d){ if((d.est==='pend'||d.est==='parcial')&&!ya[i.id+'|'+d.f]) out.push({i:i,d:d,g:r.g}); }); });
+  // Un día que pide relato solo está cubierto por un relato: el 5XQ que ya se hizo ese día no lo saca de la lista.
+  var ya={}, out=[]; S.plan.forEach(function(p){ya[p.ind+'|'+p.f+'|'+p.t]=1;});
+  activos().forEach(function(i){ var r=resumen(i,mes); r.dias.forEach(function(d){
+    var k=i.id+'|'+d.f+'|', cubierto=d.lv==='R'?ya[k+'R']:(ya[k+'R']||ya[k+'5']);
+    if((d.est==='pend'||d.est==='parcial')&&!cubierto) out.push({i:i,d:d,g:r.g});
+  }); });
   return out.sort(function(a,b){return a.d.f<b.d.f?-1:a.d.f>b.d.f?1:0;});
 }
-/* Relatos y 5XQ registrados en los Forms en el mes que no cubren ningún análisis guardado en el plan.
-   Se muestran en el plan como "Hecho · en Forms" sin guardarse en la base (se calculan cada vez).
-   Un registro cubre un análisis del plan si es del mismo indicador, con fecha entre el día y S.cfg.tol días después,
-   y del tipo que ese análisis pide (relato pide relato; 5XQ acepta cualquiera). */
-function planRealizados(mes){
-  regIndex();
-  var porInd={}; S.plan.forEach(function(p){(porInd[p.ind]=porInd[p.ind]||[]).push(p);});
-  var cubre=function(r){ return (porInd[r._i]||[]).some(function(p){ return r.f>=p.f && r.f<=addDias(p.f,S.cfg.tol) && (p.t==='5'||r.t==='R'); }); };
-  return S.reg.filter(function(r){ return r.f.slice(0,7)===mes && !(r._i&&cubre(r)); }).map(function(r){
-    var i=r._i?indById(r._i):null;
-    var R=r.t==='R';
-    return {id:'auto|'+r.t+'|'+(r.id||'')+'|'+r.f, ind:r._i||'', indTxt:i?i.nombre:r.ind, area:i?i.area:r.a, f:r.f, t:r.t, resp:R?r.resp||'':'', lim:'',
-      nota:i?'':'Indicador sin gatillo', hecho:false, auto:true, resDia:R?r.res||'':'', ruta:R?r.ruta||'':'', nombre:r.chofer||'', resInd:R?r.resRuta||'':r.res||''};
+/* Cada relato y 5XQ de los Forms tiene su análisis en el plan, guardado en la base y unido por regKey.
+   1) Un análisis ya planificado se une a un registro libre que lo cumpla (mismo indicador, fecha entre el día y S.cfg.tol días después,
+      y relato pide relato; 5XQ acepta cualquiera). 2) A cada registro que queda libre se le crea su análisis, con id fijo para no duplicar.
+   Lo escrito a mano se respeta: de los Forms solo se llenan los campos vacíos. Devuelve cuántos análisis cambiaron. */
+function planDesdeRegs(){
+  var rc=regIndex(), usados={}, n=0;
+  var llenar=function(p,r){
+    var R=p.t==='R', d={resp:R&&r.t==='R'?r.resp:'',resDia:R?r.res:'',ruta:R?r.ruta:'',nombre:r.chofer,resInd:r.t==='R'?r.resRuta:r.res};
+    for(var k in d) if(d[k]&&!p[k]) p[k]=d[k];
+  };
+  S.plan.forEach(function(p){
+    if(!p.regKey) return; usados[p.regKey]=1;
+    var r=rc.claves[p.regKey]; if(r&&r._i&&p.ind!==r._i){ p.ind=r._i; p.indN=indById(r._i).nombre; if(p.nota==='Indicador sin gatillo') p.nota=''; n++; }
   });
+  S.plan.forEach(function(p){
+    if(p.regKey||!indById(p.ind)) return;
+    var hasta=addDias(p.f,S.cfg.tol), c=S.reg.filter(function(r){ return r._i===p.ind&&!usados[regClave(r)]&&r.f>=p.f&&r.f<=hasta&&(p.t==='5'||r.t==='R'); });
+    if(!c.length) return;
+    c.sort(function(a,b){ return (a.t===p.t?0:1)-(b.t===p.t?0:1)||(a.f<b.f?-1:a.f>b.f?1:0); });
+    p.regKey=regClave(c[0]); usados[p.regKey]=1; llenar(p,c[0]); n++;
+  });
+  S.reg.forEach(function(r){
+    var k=regClave(r); if(usados[k]) return; usados[k]=1;
+    var i=r._i?indById(r._i):null, p={id:'reg-'+r.t+'-'+(r.id||uid())+'-'+r.f,ind:r._i||'',indN:i?i.nombre:r.ind,a:i?i.area:r.a||'',f:r.f,t:r.t,resp:'',lim:'',nota:i?'':'Indicador sin gatillo',hecho:false,resDia:'',ruta:'',nombre:'',resInd:'',regKey:k};
+    llenar(p,r); S.plan.push(p); n++;
+  });
+  return n;
 }
+function planValido(p){return !!(indById(p.ind)||p.regKey);}
 function vPlan(){
   var abiertos=UI.planVer==='abiertos', orden={venc:0,pend:1,hecho:2,forms:3}, cmp=function(a,b){return a<b?-1:a>b?1:0;};
-  var lst=S.plan.filter(function(p){ if(!indById(p.ind)) return false; p._e=planEstado(p); return abiertos?(p._e==='pend'||p._e==='venc'):p.f.slice(0,7)===UI.mes; })
-    .concat(abiertos?[]:planRealizados(UI.mes).map(function(p){p._e='forms'; return p;}))
+  var lst=S.plan.filter(function(p){ if(!planValido(p)) return false; p._e=planEstado(p); return abiertos?(p._e==='pend'||p._e==='venc'):p.f.slice(0,7)===UI.mes; })
     .sort(function(a,b){return orden[a._e]-orden[b._e]||cmp(a.lim||'9999',b.lim||'9999')||cmp(a.f,b.f);});
   var T={hecho:0,pend:0,venc:0,sinR:0};
   lst.forEach(function(p){ if(p._e==='forms'||p._e==='hecho') T.hecho++; else { T[p._e]++; if(p.t==='R'&&!p.resp) T.sinR++; } });
@@ -925,7 +944,7 @@ function vPlan(){
     }
     h+='</section>';
   }
-  h+='<section class="card"><div class="sechead"><div><span class="lbl">Plan</span><h2>'+(abiertos?'Análisis abiertos':'Análisis de '+esc(mesNombre(UI.mes)))+'</h2><p class="sub">Queda hecho solo cuando el relato o 5XQ aparece en los Forms cargados. Todos los relatos y 5XQ registrados en los Forms aparecen solos como hechos, aunque el día no haya pasado el gatillo. Si ya se hizo y aún no está en los Forms, márcalo a mano.</p></div>'+
+  h+='<section class="card"><div class="sechead"><div><span class="lbl">Plan</span><h2>'+(abiertos?'Análisis abiertos':'Análisis de '+esc(mesNombre(UI.mes)))+'</h2><p class="sub">Queda hecho solo cuando el relato o 5XQ aparece en los Forms cargados. Cada relato y 5XQ registrado en los Forms tiene su análisis en el plan, aunque el día no haya pasado el gatillo. Si ya se hizo y aún no está en los Forms, márcalo a mano.</p></div>'+
     '<div class="row"><button type="button" data-act="pformato" title="Trae los días por planificar de '+esc(mesNombre(UI.mes))+'">Descargar formato</button><label class="btn" for="file">Cargar plan</label></div></div>'+
     '<p class="hint" style="margin-top:6px">El formato de Excel viene con los días por planificar de '+esc(mesNombre(UI.mes))+'. Complétalo y súbelo con "Cargar plan": se agrega al plan sin borrar lo que ya está.</p>'+
     '<details style="margin-top:10px"><summary>Agregar un análisis a mano</summary><div class="form" style="margin-top:10px">'+
@@ -940,41 +959,32 @@ function vPlan(){
   var campo=function(p,f,cls,lbl,ph){return '<td><input type="text" class="'+cls+'" data-pid="'+p.id+'" data-pf="'+f+'" value="'+esc(p[f]||'')+'"'+(ph?' placeholder="'+esc(ph)+'"':'')+' aria-label="'+lbl+'"></td>';};
   if(!lst.length) h+='<tr><td colspan="13" class="sub">'+(abiertos?'No hay análisis abiertos.':'Nada planificado en este mes.')+'</td></tr>';
   lst.forEach(function(p){
-    var i=indById(p.ind), e=p._e;
-    if(p.auto){  // realizado que se agrega solo: se ve, pero no se edita ni se borra
-      h+='<tr class="done"><td class="num" style="white-space:nowrap">'+fechaCorta(p.f)+'</td><td>'+esc(p.indTxt)+'<div class="extra">'+esc(p.area||'')+'</div></td><td>'+(p.t==='R'?'Relato':'5XQ')+'</td>'+
-        '<td>'+(p.t==='R'?txt(p.resp):noApl)+'</td>'+
-        (p.t==='R'?'<td>'+txt(p.resDia)+'</td><td>'+txt(p.ruta)+'</td>':'<td>'+noApl+'</td><td>'+noApl+'</td>')+'<td>'+txt(p.nombre)+'</td><td>'+txt(p.resInd)+'</td>'+
-        '<td><span class="extra">—</span></td><td class="extra">'+esc(p.nota)+'</td>'+
-        '<td><span class="pill s-good">Hecho · en Forms</span></td><td class="c"><input type="checkbox" checked disabled aria-label="Hecho"></td><td></td></tr>';
-      return;
-    }
+    var i=indById(p.ind), e=p._e, nomInd=i?i.nombre:p.indN, areaInd=i?i.area:p.a||'';
     var est=e==='forms'?'<span class="pill s-good">Hecho · en Forms</span>':e==='hecho'?'<span class="pill s-good">Hecho · marcado</span><div class="extra">aún no está en los Forms</div>':e==='venc'?'<span class="pill s-crit">Vencido</span>':'<span class="pill s-warn">Pendiente</span>';
-    h+='<tr'+(e==='forms'||e==='hecho'?' class="done"':'')+'><td class="num" style="white-space:nowrap">'+fechaCorta(p.f)+'</td><td>'+esc(i.nombre)+'<div class="extra">'+esc(i.area)+'</div></td><td>'+(p.t==='R'?'Relato':'5XQ')+'</td>'+
+    h+='<tr'+(e==='forms'||e==='hecho'?' class="done"':'')+'><td class="num" style="white-space:nowrap">'+fechaCorta(p.f)+'</td><td>'+esc(nomInd)+'<div class="extra">'+esc(areaInd)+'</div></td><td>'+(p.t==='R'?'Relato':'5XQ')+'</td>'+
       '<td>'+(p.t==='R'?'<input type="text" class="resp" list="dlResp" data-pid="'+p.id+'" data-pf="resp" value="'+esc(p.resp)+'" aria-label="Responsable">':noApl)+'</td>'+
       (p.t==='R'?campo(p,'resDia','res','Resultado del día',datoDia(p))+campo(p,'ruta','ruta','Ruta'):'<td>'+noApl+'</td><td>'+noApl+'</td>')+
       campo(p,'nombre','nom','Nombre',nombreForms(p))+campo(p,'resInd','res','Resultado de la persona')+
       '<td><input type="date" data-pid="'+p.id+'" data-pf="lim" value="'+esc(p.lim)+'" aria-label="Fecha límite"></td>'+
       '<td><input type="text" class="nota" data-pid="'+p.id+'" data-pf="nota" value="'+esc(p.nota)+'" aria-label="Nota"></td>'+
       '<td>'+est+'</td><td class="c"><input type="checkbox" data-pid="'+p.id+'" data-pf="hecho"'+(e==='forms'||p.hecho?' checked':'')+(e==='forms'?' disabled':'')+' aria-label="Hecho"></td>'+
-      '<td><button type="button" class="rm" data-act="pdel" data-pid="'+p.id+'" aria-label="Quitar del plan">×</button></td></tr>';
+      '<td>'+(p.regKey?'':'<button type="button" class="rm" data-act="pdel" data-pid="'+p.id+'" aria-label="Quitar del plan">×</button>')+'</td></tr>';
   });
   h+='</tbody></table></div></section>';
   return h;
 }
 
 /* ----- Vista: Adherencia al plan ----- */
-/* Adherencia = hechos / planificados, solo con lo guardado en el plan. Lo realizado sin estar planificado (planRealizados) se cuenta aparte. */
+/* Adherencia = hechos / planificados, con todo lo guardado en el plan (cada relato y 5XQ de los Forms tiene su análisis). */
 function planCuenta(mes){
-  var nuevo=function(){return {plan:0,hecho:0,marcado:0,venc:0,pend:0,fuera:0};}, T={R:nuevo(),'5':nuevo()}, porInd={}, porResp={};
+  var nuevo=function(){return {plan:0,hecho:0,marcado:0,venc:0,pend:0};}, T={R:nuevo(),'5':nuevo()}, porInd={}, porResp={};
   S.plan.forEach(function(p){
-    if(p.f.slice(0,7)!==mes||!indById(p.ind)) return;
+    if(p.f.slice(0,7)!==mes||!planValido(p)) return;
     var e=planEstado(p), suma=function(c){ c.plan++; if(e==='forms'||e==='hecho') c.hecho++; if(e==='hecho') c.marcado++; if(e==='venc') c.venc++; if(e==='pend') c.pend++; };
     suma(T[p.t]);
-    var pi=porInd[p.ind]=porInd[p.ind]||{R:nuevo(),'5':nuevo()}; suma(pi[p.t]);
+    var ki=indById(p.ind)?p.ind:'~'+p.indN, pi=porInd[ki]=porInd[ki]||{nombre:p.indN,area:p.a||'',R:nuevo(),'5':nuevo()}; suma(pi[p.t]);
     if(p.t==='R'){ var k=(p.resp||'').trim()||'Sin responsable'; suma(porResp[k]=porResp[k]||nuevo()); }
   });
-  planRealizados(mes).forEach(function(p){T[p.t].fuera++;});
   return {T:T,porInd:porInd,porResp:porResp};
 }
 function vAdh(){
@@ -982,18 +992,19 @@ function vAdh(){
   var celda=function(c){ if(!c.plan) return '<span class="extra">Sin plan</span>'; var p=c.hecho/c.plan;
     return meter(p)+'<span class="extra"><b class="num" style="color:var(--ink)">'+pctTxt(p)+'</b> · '+c.hecho+' de '+c.plan+'</span>'; };
   var venc=function(n){ return n?'<span style="color:var(--crit);font-weight:600">'+n+'</span>':'0'; };
-  var heroe=function(lbl,c,tipo){ var p=c.plan?c.hecho/c.plan:null;
+  var heroe=function(lbl,c){ var p=c.plan?c.hecho/c.plan:null;
     return '<div class="card hero"><span class="lbl">'+lbl+'</span><div class="big">'+pctTxt(p)+'</div>'+meter(p)+
       '<div class="facts"><span>'+(c.plan?'<b class="num">'+c.hecho+'</b> de <b class="num">'+c.plan+'</b> planificados están hechos':'Nada planificado en este mes')+'</span>'+
-      (c.marcado?'<span>'+c.marcado+' marcado'+(c.marcado>1?'s':'')+' a mano, aún sin Forms</span>':'')+'<span>'+c.fuera+' '+tipo+' hechos fuera del plan</span></div></div>'; };
+      (c.marcado?'<span>'+c.marcado+' marcado'+(c.marcado>1?'s':'')+' a mano, aún sin Forms</span>':'')+'</div></div>'; };
   var h='<div class="sechead">'+monthbar()+'</div>';
-  h+='<section class="month dos">'+heroe('Adherencia de relatos',T.R,'relatos')+heroe('Adherencia de 5XQ',T['5'],'5XQ')+
+  h+='<section class="month dos">'+heroe('Adherencia de relatos',T.R)+heroe('Adherencia de 5XQ',T['5'])+
     '<div class="tiles"><div class="tile"><span class="lbl">Vencidos</span><b style="color:'+(T.R.venc+T['5'].venc?'var(--crit)':'inherit')+'">'+(T.R.venc+T['5'].venc)+'</b><small>'+T.R.venc+' relatos · '+T['5'].venc+' 5XQ</small></div>'+
     '<div class="tile"><span class="lbl">Pendientes</span><b>'+(T.R.pend+T['5'].pend)+'</b><small>'+T.R.pend+' relatos · '+T['5'].pend+' 5XQ, a tiempo o sin fecha</small></div></div></section>';
-  var ids=activos().filter(function(i){return C.porInd[i.id];});
-  h+='<section class="card"><div class="sechead"><div><h2>Por indicador</h2><p class="sub">Solo cuenta lo planificado. Los análisis hechos fuera del plan no suben ni bajan la adherencia.</p></div></div><div class="scroll"><table><thead><tr><th>Indicador</th><th class="bar">Relatos</th><th class="bar">5XQ</th><th class="r">Vencidos</th></tr></thead><tbody>';
+  var ids=Object.keys(C.porInd).sort(function(a,b){return (a.charAt(0)==='~'?1:0)-(b.charAt(0)==='~'?1:0)||(C.porInd[a].nombre<C.porInd[b].nombre?-1:1);});
+  h+='<section class="card"><div class="sechead"><div><h2>Por indicador</h2><p class="sub">Cada relato y 5XQ realizado cuenta como planificado y hecho. Lo pendiente son los análisis del plan que aún no están en los Forms.</p></div></div><div class="scroll"><table><thead><tr><th>Indicador</th><th class="bar">Relatos</th><th class="bar">5XQ</th><th class="r">Vencidos</th></tr></thead><tbody>';
   if(!ids.length) h+='<tr><td colspan="4" class="sub">Nada planificado en este mes.</td></tr>';
-  ids.forEach(function(i){var x=C.porInd[i.id]; h+='<tr class="click" data-act="verind" data-id="'+i.id+'"><td class="name"><button type="button" data-act="verind" data-id="'+i.id+'">'+esc(i.nombre)+'</button><div class="extra">'+esc(i.area)+'</div></td><td class="bar">'+celda(x.R)+'</td><td class="bar">'+celda(x['5'])+'</td><td class="r">'+venc(x.R.venc+x['5'].venc)+'</td></tr>';});
+  ids.forEach(function(k){var x=C.porInd[k], i=indById(k);
+    h+=(i?'<tr class="click" data-act="verind" data-id="'+i.id+'"><td class="name"><button type="button" data-act="verind" data-id="'+i.id+'">'+esc(i.nombre)+'</button><div class="extra">'+esc(i.area)+'</div></td>':'<tr><td>'+esc(x.nombre)+'<div class="extra">'+esc(x.area)+' · sin gatillo</div></td>')+'<td class="bar">'+celda(x.R)+'</td><td class="bar">'+celda(x['5'])+'</td><td class="r">'+venc(x.R.venc+x['5'].venc)+'</td></tr>';});
   h+='</tbody></table></div></section>';
   var rs=Object.keys(C.porResp).sort(function(a,b){return C.porResp[b].plan-C.porResp[a].plan||(a<b?-1:1);});
   h+='<section class="card"><div class="sechead"><div><h2>Relatos por responsable</h2></div></div><div class="scroll"><table><thead><tr><th>Responsable</th><th class="bar">Adherencia</th><th class="r">Pendientes</th><th class="r">Vencidos</th></tr></thead><tbody>';
@@ -1001,10 +1012,10 @@ function vAdh(){
   rs.forEach(function(k){var c=C.porResp[k]; h+='<tr><td>'+esc(k)+'</td><td class="bar">'+celda(c)+'</td><td class="r">'+c.pend+'</td><td class="r">'+venc(c.venc)+'</td></tr>';});
   h+='</tbody></table></div></section>';
   var y=UI.mes.slice(0,4);
-  h+='<section class="card"><div class="sechead"><div><h2>Mes a mes, '+y+'</h2><p class="sub">Clic en un mes para verlo arriba.</p></div></div><div class="scroll"><table><thead><tr><th>Mes</th><th class="bar">Relatos</th><th class="bar">5XQ</th><th class="r">Vencidos</th><th class="r">Hechos fuera del plan<small>relatos · 5XQ</small></th></tr></thead><tbody>';
+  h+='<section class="card"><div class="sechead"><div><h2>Mes a mes, '+y+'</h2><p class="sub">Clic en un mes para verlo arriba.</p></div></div><div class="scroll"><table><thead><tr><th>Mes</th><th class="bar">Relatos</th><th class="bar">5XQ</th><th class="r">Vencidos</th></tr></thead><tbody>';
   for(var m=1;m<=12;m++){ var mm=y+'-'+pad(m), t=planCuenta(mm).T;
-    if(!(t.R.plan+t['5'].plan+t.R.fuera+t['5'].fuera)) continue;
-    h+='<tr class="click" data-act="adhmes" data-m="'+mm+'"'+(mm===UI.mes?' style="font-weight:600"':'')+'><td class="name"><button type="button" data-act="adhmes" data-m="'+mm+'">'+esc(mesNombre(mm))+'</button></td><td class="bar">'+celda(t.R)+'</td><td class="bar">'+celda(t['5'])+'</td><td class="r">'+venc(t.R.venc+t['5'].venc)+'</td><td class="r">'+t.R.fuera+' · '+t['5'].fuera+'</td></tr>'; }
+    if(!(t.R.plan+t['5'].plan)) continue;
+    h+='<tr class="click" data-act="adhmes" data-m="'+mm+'"'+(mm===UI.mes?' style="font-weight:600"':'')+'><td class="name"><button type="button" data-act="adhmes" data-m="'+mm+'">'+esc(mesNombre(mm))+'</button></td><td class="bar">'+celda(t.R)+'</td><td class="bar">'+celda(t['5'])+'</td><td class="r">'+venc(t.R.venc+t['5'].venc)+'</td></tr>'; }
   h+='</tbody></table></div></section>';
   return h;
 }
@@ -1273,7 +1284,7 @@ document.addEventListener('click',function(e){
     var reg=S.reg, rm=S.regMeta, pl=S.plan.map(function(p){var i=indById(p.ind); if(i) p.indN=i.nombre; return p;});
     S=desdeSeed(); S.reg=reg; S.regMeta=rm;
     var byN={}; S.ind.forEach(function(i){byN[norm(i.nombre)]=i.id;});
-    S.plan=pl.filter(function(p){p.ind=byN[norm(p.indN)]; return !!p.ind;});
+    S.plan=pl.filter(function(p){p.ind=byN[norm(p.indN)]||''; return !!(p.ind||p.regKey);});
     invalidar(); guardar(); render(); flash('ok','Se restauraron los datos del Excel anterior.'); return;
   }
 });
@@ -1291,7 +1302,7 @@ document.addEventListener('change',function(e){
     guardar(); if(pf==='hecho'||pf==='lim') render(); return;
   }
   if(t.dataset.chg==='pnT'){ $('pnRespL').hidden=t.value==='5'; document.querySelectorAll('.soloR').forEach(function(l){l.hidden=t.value==='5';}); return; }
-  if(t.dataset.chg==='alias'&&t.value){var p=t.dataset.k.split('|'), i=indById(t.value), nm=p.slice(1).join('|'); var amb=S.reg.some(function(r){return norm(r.ind)===norm(nm)&&norm(r.a)!==norm(p[0]);}); i.alias.push(amb&&p[0]?p[0]+'|'+nm:nm); invalidar(); guardar(); render(); flash('ok','"'+esc(nm)+'" quedó unido a '+esc(i.nombre)+'.'); return;}
+  if(t.dataset.chg==='alias'&&t.value){var p=t.dataset.k.split('|'), i=indById(t.value), nm=p.slice(1).join('|'); var amb=S.reg.some(function(r){return norm(r.ind)===norm(nm)&&norm(r.a)!==norm(p[0]);}); i.alias.push(amb&&p[0]?p[0]+'|'+nm:nm); invalidar(); planDesdeRegs(); invalidar(); guardar(); render(); flash('ok','"'+esc(nm)+'" quedó unido a '+esc(i.nombre)+'.'); return;}
   if(t.dataset.f&&t.dataset.id){
     var i2=indById(t.dataset.id), f=t.dataset.f; if(!i2) return;
     if(f==='activo') i2.activo=t.checked;

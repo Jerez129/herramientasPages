@@ -61,7 +61,7 @@ S = { v:1,
 
 ## Adherencia al plan (pestaña "Adherencia al plan", `vAdh`)
 
-- Adherencia = hechos / planificados, solo con lo guardado en `S.plan` (`planCuenta`), separada en relatos y 5XQ; por indicador, por responsable (relatos) y mes a mes. "Hecho" = en Forms o marcado a mano. Las filas `auto` de `planRealizados` se cuentan aparte como "fuera del plan" y no afectan el porcentaje. Vencidos depende de que el análisis tenga `lim`.
+- Adherencia = hechos / planificados, solo con lo guardado en `S.plan` (`planCuenta`), separada en relatos y 5XQ; por indicador, por responsable (relatos) y mes a mes. "Hecho" = en Forms o marcado a mano. Como cada registro de los Forms tiene su análisis, lo realizado sin plan previo cuenta como planificado y hecho, y sube el porcentaje. Vencidos depende de que el análisis tenga `lim`.
 
 ## Plan de análisis (pestaña "Plan de análisis", `vPlan`)
 
@@ -70,7 +70,7 @@ S = { v:1,
 - `indN` guarda el nombre del indicador para reubicar el plan al volver a los datos del Excel anterior (los ids cambian).
 - Solo los relatos llevan responsable; en los 5XQ `resp` queda vacío (`nuevoPlan`).
 - Campos de resultado, como texto: relatos `resDia`, `ruta`, `nombre`, `resInd`; 5XQ `nombre` y `resInd`. Si `resDia` o `nombre` están vacíos, la página muestra de guía el dato del día (`datoDia`) o el chofer de los Forms (`nombreForms`) y el respaldo los escribe. En la hoja Plan van al final (columnas 8 a 11), así los archivos viejos de 7 columnas siguen cargando.
-- `planRealizados(mes)`: cada relato / 5XQ de `S.reg` del mes que no cubre un análisis guardado del plan aparece en la tabla del plan como "Hecho · en Forms" (filas `auto`, solo lectura). **No se guardan en la base**: se calculan cada vez, así no hace falta la clave ni botón. Incluye registros de indicadores sin gatillo ("Indicador sin gatillo"). No van en la hoja Plan del respaldo.
+- `planDesdeRegs()`: **cada relato y 5XQ de `S.reg` tiene su análisis guardado en `S.plan`**, unido por `regKey` (`regClave`: tipo|ID|fecha). Primero une los análisis ya planificados a un registro libre; a los registros restantes les crea uno con id fijo `reg-t-id-fecha`. De los Forms solo llena campos vacíos. Corre al cargar archivos y al unir un indicador. Los de indicadores sin gatillo llevan `ind:''`, `indN`, `a` y nota "Indicador sin gatillo". Estas filas se editan, pero no se borran.
 - Hoja **Plan**: con hoja Indicadores (respaldo completo) reemplaza el plan; sola (formato del plan) agrega o actualiza por indicador + día + tipo.
 - Menú "Descargar plantillas": `plantillaDatos()` (sin hoja Indicadores, así que al cargarla solo agrega), `formatoPlan(conDias)`, `exportar()` (respaldo completo).
 
