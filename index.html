@@ -168,7 +168,10 @@ svg.ch circle{stroke:var(--surface);stroke-width:1.5}
 .reg td{vertical-align:top}
 .reg .long{min-width:260px;max-width:420px;font-size:13px}
 /* Plan de análisis */
-.plan{min-width:980px}
+.plan{min-width:1560px}
+.plan input.res{min-width:95px}
+.plan input.ruta{min-width:85px}
+.plan input.nom{min-width:150px}
 .plan td{padding:4px 6px}
 .plan td:nth-child(2){min-width:170px}
 .plan input[type=text],.plan input[type=date]{font-size:13px;padding:5px 7px}
@@ -367,7 +370,7 @@ function api(method,path,body){
     .then(function(r){ if(!r.ok){var e=new Error('HTTP '+r.status); e.status=r.status; throw e;} return r.json(); });
 }
 function setSync(st,txt){var e=$('sync'); if(e){e.textContent=txt; e.parentNode.dataset.st=st;}}
-function planLimpio(x){return {id:x.id,ind:x.ind,indN:x.indN||'',f:x.f,t:x.t,resp:x.resp||'',lim:x.lim||'',nota:x.nota||'',hecho:!!x.hecho};}
+function planLimpio(x){return {id:x.id,ind:x.ind,indN:x.indN||'',f:x.f,t:x.t,resp:x.resp||'',lim:x.lim||'',nota:x.nota||'',hecho:!!x.hecho,resDia:x.resDia||'',ruta:x.ruta||'',nombre:x.nombre||'',resInd:x.resInd||''};}
 function regLimpio(r){var o={}; for(var k in r) if(k.charAt(0)!=='_') o[k]=r[k]; return o;}
 /* Lo que se compara con la base: textos por sección, y por fila en datos y plan. */
 function foto(s){
@@ -576,7 +579,8 @@ function cargarPlantilla(wb,nombre){
       var ind=byN[norm(r[0])], fe=parseFecha(r[1]);
       if(!ind){ sinP[r[0]]=1; return; }
       if(!fe){ omit++; return; }
-      var p=nuevoPlan(ind.id,fe,/5/.test(String(r[2]||''))?'5':'R',String(r[3]||'').trim(),parseFecha(r[4])||'',String(r[5]||'').trim());
+      var p=nuevoPlan(ind.id,fe,/5/.test(String(r[2]||''))?'5':'R',String(r[3]||'').trim(),parseFecha(r[4])||'',String(r[5]||'').trim(),
+        {resDia:resTxt(r[7],ind),ruta:String(r[8]==null?'':r[8]).trim(),nombre:String(r[9]==null?'':r[9]).trim(),resInd:resTxt(r[10],ind)});
       p.hecho=/^s[ií]/i.test(String(r[6]||'').trim()); pl.push(p);
     });
     if(wsI){ S.plan=pl; partes.push(pl.length+' análisis en el plan'); }
@@ -585,7 +589,8 @@ function cargarPlantilla(wb,nombre){
       pl.forEach(function(p){
         var ex=S.plan.filter(function(q){return q.ind===p.ind&&q.f===p.f&&q.t===p.t;})[0];
         if(!ex){ S.plan.push(p); nn++; return; }
-        if(p.resp) ex.resp=p.resp; if(p.lim) ex.lim=p.lim; if(p.nota) ex.nota=p.nota; if(p.hecho) ex.hecho=true; na++;
+        if(p.resp) ex.resp=p.resp; if(p.lim) ex.lim=p.lim; if(p.nota) ex.nota=p.nota; if(p.hecho) ex.hecho=true;
+        ['resDia','ruta','nombre','resInd'].forEach(function(k){ if(p[k]) ex[k]=p[k]; }); na++;
       });
       partes.push(nn+' análisis agregados al plan'+(na?' · '+na+' actualizados':''));
     }
@@ -647,7 +652,7 @@ function cargarForms(wb,nombre){
     var resp=''; for(j=0;j<C.resp.length&&!resp;j++) resp=g(C.resp[j]);
     var pq=C.pq.map(function(i){return g(i);}).filter(Boolean);
     if(pq.length&&pq.every(function(p){return /^prueba$/i.test(p);})) return;
-    var x={t:t,f:fe,a:g(C.area),ind:ind,resp:resp,chofer:g(C.chofer),ruta:g(C.ruta),res:g(C.res)||g(C.resRuta),
+    var x={t:t,f:fe,a:g(C.area),ind:ind,resp:resp,chofer:g(C.chofer),ruta:g(C.ruta),res:g(C.res)||g(C.resRuta),resRuta:g(C.resRuta),
       pq1:(pq[0]||'').slice(0,240),causa:g(C.causa).slice(0,400),acc:g(C.acc).slice(0,400),cron:/^s/i.test(g(C.cron))?'Sí':g(C.cron)?'No':''};
     if(g(C.id)) x.id=g(C.id);
     out.push(x);
@@ -715,7 +720,7 @@ function exportar(){
   w=XLSX.utils.aoa_to_sheet(F); for(r=1;r<F.length;r++){var c=XLSX.utils.encode_cell({r:r,c:2}); if(w[c]) w[c].z=ff[r-1];}
   w['!cols']=[{wch:28},{wch:10},{wch:14}]; XLSX.utils.book_append_sheet(wb,w,'Gatillos fijos');
   var P=[PLAN_COLS];
-  S.plan.forEach(function(p){var i=indById(p.ind); if(i) P.push([i.nombre,fechaXL(p.f),p.t==='R'?'Relato':'5XQ',p.t==='R'?p.resp:'',fechaXL(p.lim),p.nota,p.hecho?'Sí':'No']);});
+  S.plan.forEach(function(p){var i=indById(p.ind); if(i) P.push([i.nombre,fechaXL(p.f),p.t==='R'?'Relato':'5XQ',p.t==='R'?p.resp:'',fechaXL(p.lim),p.nota,p.hecho?'Sí':'No',p.t==='R'?p.resDia||datoDia(p):'',p.t==='R'?p.ruta||'':'',p.t==='R'?p.nombre||'':'',p.resInd||'']);});
   XLSX.utils.book_append_sheet(wb,hojaPlan(P),'Plan');
   XLSX.writeFile(wb,'Plantilla_Gatillos_CD_Bavaro_'+ymd(new Date())+'.xlsx');
 }
@@ -800,14 +805,25 @@ function planEstado(p){
   return 'pend';
 }
 /* Solo los relatos llevan responsable (nombres fijos); los 5XQ no. */
-function nuevoPlan(id,f,t,resp,lim,nota){var i=indById(id);t=t==='5'?'5':'R';return {id:uid(),ind:id,indN:i?i.nombre:'',f:f,t:t,resp:t==='R'?resp||'':'',lim:lim||'',nota:nota||'',hecho:false};}
+function nuevoPlan(id,f,t,resp,lim,nota,ex){var i=indById(id);t=t==='5'?'5':'R';ex=ex||{};var R=t==='R';
+  // Relato: resultado del día, ruta, nombre y resultado de la persona. 5XQ: solo el resultado de la persona.
+  return {id:uid(),ind:id,indN:i?i.nombre:'',f:f,t:t,resp:R?resp||'':'',lim:lim||'',nota:nota||'',hecho:false,
+    resDia:R?ex.resDia||'':'',ruta:R?ex.ruta||'':'',nombre:R?ex.nombre||'':'',resInd:ex.resInd||''};}
+/* Resultado leído de Excel: los números y horas se muestran en la unidad del indicador; el texto queda como está. */
+function resTxt(x,ind){
+  if(x==null||x==='') return '';
+  if(typeof x==='number'||x instanceof Date){var v=parseVal(x,ind.unidad); return v==null?'':fmt(v,ind.unidad);}
+  return String(x).trim();
+}
+/* Valor del indicador ese día, si hay dato real. */
+function datoDia(p){var i=indById(p.ind), x=(S.datos[p.ind]||{})[p.f]; return i&&x&&x.o!=='i'?fmt(x.v,i.unidad):'';}
 function fechaXL(f){return f?new Date(+f.slice(0,4),+f.slice(5,7)-1,+f.slice(8,10)):'';}
 function hojaPlan(P){
   var w=XLSX.utils.aoa_to_sheet(P,{cellDates:true});
   for(var r=1;r<P.length;r++) [1,4].forEach(function(c){var ad=XLSX.utils.encode_cell({r:r,c:c}); if(w[ad]&&P[r][c]) w[ad].z='yyyy-mm-dd';});
-  w['!cols']=[{wch:28},{wch:12},{wch:8},{wch:24},{wch:12},{wch:40},{wch:7}]; return w;
+  w['!cols']=[{wch:28},{wch:12},{wch:8},{wch:24},{wch:12},{wch:40},{wch:7},{wch:24},{wch:16},{wch:26},{wch:18}]; return w;
 }
-var PLAN_COLS=['Indicador','Día','Tipo','Responsable (solo relatos)','Fecha límite','Nota','Hecho'];
+var PLAN_COLS=['Indicador','Día','Tipo','Responsable (solo relatos)','Fecha límite','Nota','Hecho','Resultado del día (solo relatos)','Ruta (solo relatos)','Nombre (solo relatos)','Resultado de la persona'];
 /* Formato para subir el plan desde Excel. Con conDias trae los días por planificar del mes que se está viendo. */
 function formatoPlan(conDias){
   var wb=XLSX.utils.book_new();
@@ -818,11 +834,12 @@ function formatoPlan(conDias){
     ['  Tipo: Relato o 5XQ.'],
     ['  Responsable: solo para relatos. En los 5XQ déjalo vacío (se ignora).'],
     ['  Fecha límite y Nota: opcionales. Hecho: escribe Sí si ya se hizo pero aún no está en los Forms.'],
+    ['  Relatos: Resultado del día, Ruta, Nombre y Resultado de la persona. 5XQ: solo Resultado de la persona.'],
     ['Súbelo en la página con "Cargar Excel" (o "Cargar plan" en la pestaña Plan de análisis).'],
     ['  Si un análisis ya está en el plan (mismo indicador, día y tipo) se actualiza; si no, se agrega. No se borra nada del plan.']];
   var w=XLSX.utils.aoa_to_sheet(ins); w['!cols']=[{wch:110}]; XLSX.utils.book_append_sheet(wb,w,'Instrucciones');
   var P=[PLAN_COLS];
-  if(conDias) porPlanificar(UI.mes).forEach(function(x){P.push([x.i.nombre,fechaXL(x.d.f),x.d.lv==='R'?'Relato':'5XQ','','','','']);});
+  if(conDias) porPlanificar(UI.mes).forEach(function(x){P.push([x.i.nombre,fechaXL(x.d.f),x.d.lv==='R'?'Relato':'5XQ','','','','',x.d.lv==='R'?fmt(x.d.v,x.i.unidad):'','','','']);});
   XLSX.utils.book_append_sheet(wb,hojaPlan(P),'Plan');
   var L=[['Indicadores','Tipo']], ins2=activos();
   for(var k=0;k<Math.max(ins2.length,2);k++) L.push([ins2[k]?ins2[k].nombre:'',['Relato','5XQ'][k]||'']);
@@ -845,8 +862,9 @@ function planRealizados(mes){
   var cubre=function(r){ return (porInd[r._i]||[]).some(function(p){ return r.f>=p.f && r.f<=addDias(p.f,S.cfg.tol) && (p.t==='5'||r.t==='R'); }); };
   return S.reg.filter(function(r){ return r.f.slice(0,7)===mes && !(r._i&&cubre(r)); }).map(function(r){
     var i=r._i?indById(r._i):null;
-    return {id:'auto|'+r.t+'|'+(r.id||'')+'|'+r.f, ind:r._i||'', indTxt:i?i.nombre:r.ind, area:i?i.area:r.a, f:r.f, t:r.t, resp:r.t==='R'?r.resp||'':'', lim:'',
-      nota:(i?'':'Indicador sin gatillo')+(r.ruta?(i?'':' · ')+'Ruta '+r.ruta:''), hecho:false, auto:true};
+    var R=r.t==='R';
+    return {id:'auto|'+r.t+'|'+(r.id||'')+'|'+r.f, ind:r._i||'', indTxt:i?i.nombre:r.ind, area:i?i.area:r.a, f:r.f, t:r.t, resp:R?r.resp||'':'', lim:'',
+      nota:i?'':'Indicador sin gatillo', hecho:false, auto:true, resDia:R?r.res||'':'', ruta:R?r.ruta||'':'', nombre:R?r.chofer||'':'', resInd:R?r.resRuta||'':r.res||''};
   });
 }
 function vPlan(){
@@ -889,20 +907,27 @@ function vPlan(){
     '<label>Día<input type="date" id="pnF" value="'+(UI.mes===hoyMes()?ymd(new Date()):UI.mes+'-01')+'"></label>'+
     '<label>Tipo<select id="pnT" data-chg="pnT"><option value="R">Relato</option><option value="5">5XQ</option></select></label>'+
     '<label id="pnRespL">Responsable<input type="text" id="pnResp" list="dlResp"></label><label>Fecha límite<input type="date" id="pnLim"></label><label>Nota<input type="text" id="pnNota"></label>'+
+    '<label class="soloR">Resultado del día<input type="text" id="pnResDia"></label><label class="soloR">Ruta<input type="text" id="pnRuta"></label><label class="soloR">Nombre<input type="text" id="pnNombre"></label><label>Resultado de la persona<input type="text" id="pnResInd"></label>'+
     '<div><button type="button" class="pri" data-act="pnew">Agregar</button></div></div><p class="hint" id="pnErr" style="color:var(--crit);margin-top:6px"></p></details>';
-  h+='<div class="scroll" style="margin-top:10px"><table class="plan"><thead><tr><th>Día</th><th>Indicador</th><th>Tipo</th><th>Responsable</th><th>Fecha límite</th><th>Nota</th><th>Estado</th><th class="c">Hecho</th><th></th></tr></thead><tbody>';
-  if(!lst.length) h+='<tr><td colspan="9" class="sub">'+(abiertos?'No hay análisis abiertos.':'Nada planificado en este mes.')+'</td></tr>';
+  h+='<div class="scroll" style="margin-top:10px"><table class="plan"><thead><tr><th>Día</th><th>Indicador</th><th>Tipo</th><th>Responsable</th><th>Resultado<small>del día</small></th><th>Ruta</th><th>Nombre</th><th>Resultado<small>de la persona</small></th><th>Fecha límite</th><th>Nota</th><th>Estado</th><th class="c">Hecho</th><th></th></tr></thead><tbody>';
+  var noApl='<span class="extra">No aplica</span>', txt=function(v){return esc(v)||'<span class="extra">—</span>';};
+  var campo=function(p,f,cls,lbl,ph){return '<td><input type="text" class="'+cls+'" data-pid="'+p.id+'" data-pf="'+f+'" value="'+esc(p[f]||'')+'"'+(ph?' placeholder="'+esc(ph)+'"':'')+' aria-label="'+lbl+'"></td>';};
+  if(!lst.length) h+='<tr><td colspan="13" class="sub">'+(abiertos?'No hay análisis abiertos.':'Nada planificado en este mes.')+'</td></tr>';
   lst.forEach(function(p){
     var i=indById(p.ind), e=p._e;
     if(p.auto){  // realizado que se agrega solo: se ve, pero no se edita ni se borra
       h+='<tr class="done"><td class="num" style="white-space:nowrap">'+fechaCorta(p.f)+'</td><td>'+esc(p.indTxt)+'<div class="extra">'+esc(p.area||'')+'</div></td><td>'+(p.t==='R'?'Relato':'5XQ')+'</td>'+
-        '<td>'+(p.t==='R'?esc(p.resp)||'<span class="extra">—</span>':'<span class="extra">No aplica</span>')+'</td><td><span class="extra">—</span></td><td class="extra">'+esc(p.nota)+'</td>'+
+        '<td>'+(p.t==='R'?txt(p.resp):noApl)+'</td>'+
+        (p.t==='R'?'<td>'+txt(p.resDia)+'</td><td>'+txt(p.ruta)+'</td><td>'+txt(p.nombre)+'</td>':'<td>'+noApl+'</td><td>'+noApl+'</td><td>'+noApl+'</td>')+'<td>'+txt(p.resInd)+'</td>'+
+        '<td><span class="extra">—</span></td><td class="extra">'+esc(p.nota)+'</td>'+
         '<td><span class="pill s-good">Hecho · en Forms</span></td><td class="c"><input type="checkbox" checked disabled aria-label="Hecho"></td><td></td></tr>';
       return;
     }
     var est=e==='forms'?'<span class="pill s-good">Hecho · en Forms</span>':e==='hecho'?'<span class="pill s-good">Hecho · marcado</span><div class="extra">aún no está en los Forms</div>':e==='venc'?'<span class="pill s-crit">Vencido</span>':'<span class="pill s-warn">Pendiente</span>';
     h+='<tr'+(e==='forms'||e==='hecho'?' class="done"':'')+'><td class="num" style="white-space:nowrap">'+fechaCorta(p.f)+'</td><td>'+esc(i.nombre)+'<div class="extra">'+esc(i.area)+'</div></td><td>'+(p.t==='R'?'Relato':'5XQ')+'</td>'+
-      '<td>'+(p.t==='R'?'<input type="text" class="resp" list="dlResp" data-pid="'+p.id+'" data-pf="resp" value="'+esc(p.resp)+'" aria-label="Responsable">':'<span class="extra">No aplica</span>')+'</td>'+
+      '<td>'+(p.t==='R'?'<input type="text" class="resp" list="dlResp" data-pid="'+p.id+'" data-pf="resp" value="'+esc(p.resp)+'" aria-label="Responsable">':noApl)+'</td>'+
+      (p.t==='R'?campo(p,'resDia','res','Resultado del día',datoDia(p))+campo(p,'ruta','ruta','Ruta')+campo(p,'nombre','nom','Nombre'):'<td>'+noApl+'</td><td>'+noApl+'</td><td>'+noApl+'</td>')+
+      campo(p,'resInd','res','Resultado de la persona')+
       '<td><input type="date" data-pid="'+p.id+'" data-pf="lim" value="'+esc(p.lim)+'" aria-label="Fecha límite"></td>'+
       '<td><input type="text" class="nota" data-pid="'+p.id+'" data-pf="nota" value="'+esc(p.nota)+'" aria-label="Nota"></td>'+
       '<td>'+est+'</td><td class="c"><input type="checkbox" data-pid="'+p.id+'" data-pf="hecho"'+(e==='forms'||p.hecho?' checked':'')+(e==='forms'?' disabled':'')+' aria-label="Hecho"></td>'+
@@ -1160,7 +1185,8 @@ document.addEventListener('click',function(e){
   }
   if(a==='pnew'){
     var pf=$('pnF').value; if(!pf||!$('pnInd').value){ $('pnErr').textContent='Elige el indicador y el día del análisis.'; return; }
-    S.plan.push(nuevoPlan($('pnInd').value,pf,$('pnT').value,$('pnResp').value.trim(),$('pnLim').value,$('pnNota').value.trim()));
+    S.plan.push(nuevoPlan($('pnInd').value,pf,$('pnT').value,$('pnResp').value.trim(),$('pnLim').value,$('pnNota').value.trim(),
+      {resDia:$('pnResDia').value.trim(),ruta:$('pnRuta').value.trim(),nombre:$('pnNombre').value.trim(),resInd:$('pnResInd').value.trim()}));
     if(UI.planVer==='mes') UI.mes=pf.slice(0,7);
     guardar(); render(); flash('ok','Análisis agregado al plan.'); return;
   }
@@ -1191,7 +1217,7 @@ document.addEventListener('change',function(e){
     if(pf==='hecho') pl.hecho=t.checked; else pl[pf]=t.value.trim();
     guardar(); if(pf==='hecho'||pf==='lim') render(); return;
   }
-  if(t.dataset.chg==='pnT'){ $('pnRespL').hidden=t.value==='5'; return; }
+  if(t.dataset.chg==='pnT'){ $('pnRespL').hidden=t.value==='5'; document.querySelectorAll('.soloR').forEach(function(l){l.hidden=t.value==='5';}); return; }
   if(t.dataset.chg==='alias'&&t.value){var p=t.dataset.k.split('|'), i=indById(t.value), nm=p.slice(1).join('|'); var amb=S.reg.some(function(r){return norm(r.ind)===norm(nm)&&norm(r.a)!==norm(p[0]);}); i.alias.push(amb&&p[0]?p[0]+'|'+nm:nm); invalidar(); guardar(); render(); flash('ok','"'+esc(nm)+'" quedó unido a '+esc(i.nombre)+'.'); return;}
   if(t.dataset.f&&t.dataset.id){
     var i2=indById(t.dataset.id), f=t.dataset.f; if(!i2) return;

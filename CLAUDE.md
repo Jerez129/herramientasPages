@@ -53,7 +53,7 @@ S = { v:1,
   fijos: { [indId]: { "AAAA-MM": valor } },
   reg:   [{t:'R'|'5', f, a, ind, resp, chofer, ruta, res, pq1, causa, acc, cron}],  // de los Forms
   regMeta: { R:{archivo,cargado,n,desde,hasta}, '5':{...} },
-  plan:  [{id, ind, indN, f, t:'R'|'5', resp, lim, nota, hecho}],          // Plan de análisis
+  plan:  [{id, ind, indN, f, t:'R'|'5', resp, lim, nota, hecho, resDia, ruta, nombre, resInd}],   // Plan de análisis
   cfg: { tol } }
 ```
 
@@ -63,6 +63,7 @@ S = { v:1,
 - Estado (`planEstado`): `forms` si `regsDia()` trae el análisis (relato exige relato; 5XQ acepta cualquiera), `hecho` si se marcó a mano, `venc` si pasó `lim`, si no `pend`.
 - `indN` guarda el nombre del indicador para reubicar el plan al volver a los datos del Excel anterior (los ids cambian).
 - Solo los relatos llevan responsable; en los 5XQ `resp` queda vacío (`nuevoPlan`).
+- Campos de resultado, como texto: relatos `resDia`, `ruta`, `nombre`, `resInd`; 5XQ solo `resInd`. Si `resDia` está vacío, la página muestra de guía el dato del día (`datoDia`) y el respaldo lo escribe. En la hoja Plan van al final (columnas 8 a 11), así los archivos viejos de 7 columnas siguen cargando.
 - `planRealizados(mes)`: cada relato / 5XQ de `S.reg` del mes que no cubre un análisis guardado del plan aparece en la tabla del plan como "Hecho · en Forms" (filas `auto`, solo lectura). **No se guardan en la base**: se calculan cada vez, así no hace falta la clave ni botón. Incluye registros de indicadores sin gatillo ("Indicador sin gatillo"). No van en la hoja Plan del respaldo.
 - Hoja **Plan**: con hoja Indicadores (respaldo completo) reemplaza el plan; sola (formato del plan) agrega o actualiza por indicador + día + tipo.
 - Menú "Descargar plantillas": `plantillaDatos()` (sin hoja Indicadores, así que al cargarla solo agrega), `formatoPlan(conDias)`, `exportar()` (respaldo completo).
