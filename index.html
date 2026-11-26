@@ -375,20 +375,38 @@ function setSync(st,txt){var e=$('sync'); if(e){e.textContent=txt; e.parentNode.
 function planLimpio(x){return {id:x.id,ind:x.ind,indN:x.indN||'',f:x.f,t:x.t,resp:x.resp||'',lim:x.lim||'',nota:x.nota||'',hecho:!!x.hecho,resDia:x.resDia||'',ruta:x.ruta||'',nombre:x.nombre||'',resInd:x.resInd||'',a:x.a||'',regKey:x.regKey||''};}
 function regLimpio(r){var o={}; for(var k in r) if(k.charAt(0)!=='_') o[k]=r[k]; return o;}
 /* Lo que se compara con la base: textos por sección, y por fila en datos y plan. */
-function foto(s){
+/* Gatillos ya calculados que se guardan en la base (config "gatillos") para que otras páginas (pizarrasPages) los lean
+   sin repetir el cálculo. Van todos los indicadores, desde el primer mes con datos hasta el mes siguiente al actual
+   (así el gatillo de un mes nuevo ya está en la base cuando empieza). Por día también va qué registros de los Forms hay
+   (R, 5 o R5), unidos al indicador con los mismos alias, para saber qué análisis ya están hechos. */
+function gatillosParaBase(){
+  var hasta=addMes(hoyMes(),1), out={v:1, hasta:hasta, tol:S.cfg.tol, ind:{}, regs:{}};
+  var ini=null; for(var id in S.datos) for(var f in S.datos[id]) if(!ini||f<ini) ini=f;
+  S.ind.forEach(function(i){
+    var m={};
+    if(ini) for(var mes=ini.slice(0,7); mes<=hasta; mes=addMes(mes,1)){ var g=gatillo(i,mes); if(g.v!=null) m[mes]=[g.v,g.v5,g.fuente==='fijo'?'f':'c']; }
+    out.ind[i.id]={n:i.nombre, s:i.sentido, u:i.unidad, a:i.alias, m:m};
+  });
+  var pi=regIndex().porInd;
+  Object.keys(pi).sort().forEach(function(id){ var o={}; Object.keys(pi[id]).sort().forEach(function(f){ var t=''; pi[id][f].forEach(function(r){ if(t.indexOf(r.t)<0) t+=r.t; }); o[f]=t.split('').sort().join(''); }); out.regs[id]=o; });
+  return out;
+}
+function foto(s,gat){
   var d={}, p={};
   for(var id in s.datos) for(var f in s.datos[id]) d[id+'|'+f]=s.datos[id][f].v+'|'+(s.datos[id][f].o||'');
   s.plan.forEach(function(x){p[x.id]=JSON.stringify(planLimpio(x));});
   return {ind:JSON.stringify(s.ind), fijos:JSON.stringify(s.fijos), cfg:JSON.stringify(s.cfg), regMeta:JSON.stringify(s.regMeta),
     // Los registros se comparan completos: una respuesta corregida debe llegar a la base aunque el resumen (regMeta) no cambie.
-    R:JSON.stringify(s.reg.filter(function(r){return r.t==='R';}).map(regLimpio)), '5':JSON.stringify(s.reg.filter(function(r){return r.t==='5';}).map(regLimpio)), d:d, p:p};
+    R:JSON.stringify(s.reg.filter(function(r){return r.t==='R';}).map(regLimpio)), '5':JSON.stringify(s.reg.filter(function(r){return r.t==='5';}).map(regLimpio)), d:d, p:p,
+    // Lo de la base se compara tal como está guardado; lo de la página se calcula con S.
+    gatillos:gat!==undefined?gat:JSON.stringify(gatillosParaBase())};
 }
 function trozos(a,n){var o=[]; for(var i=0;i<a.length;i+=n) o.push(a.slice(i,i+n)); return o;}
 function sync(){
   if(!DB.ready||DB.noKey) return;
   if(DB.busy){DB.again=true; return;}
   var now=foto(S), old=DB.snap, jobs=[];
-  ['ind','fijos','cfg','regMeta'].forEach(function(k){ if(now[k]!==old[k]) jobs.push(['PUT','/api/config/'+k,JSON.parse(now[k])]); });
+  ['ind','fijos','cfg','regMeta','gatillos'].forEach(function(k){ if(now[k]!==old[k]) jobs.push(['PUT','/api/config/'+k,JSON.parse(now[k])]); });
   ['R','5'].forEach(function(t){ if(now[t]!==old[t]){
     var rows=S.reg.filter(function(r){return r.t===t;}).map(regLimpio), ps=trozos(rows,800); if(!ps.length) ps=[[]];
     ps.forEach(function(part,i){ jobs.push(['POST','/api/regs/'+t,{rows:part,first:i===0}]); });
@@ -438,10 +456,12 @@ function pull(){
     var c=st.config||{};
     var sdb={v:1, ind:c.ind||[], fijos:c.fijos||{}, cfg:c.cfg||{tol:1}, regMeta:c.regMeta||{}, reg:st.reg||[], plan:st.plan||[], datos:{}};
     (st.datos||[]).forEach(function(r){(sdb.datos[r[0]]=sdb.datos[r[0]]||{})[r[1]]={v:r[2],o:r[3]||''};});
-    DB.snap=foto(sdb); DB.ready=true;
+    DB.snap=foto(sdb,JSON.stringify(c.gatillos==null?null:c.gatillos)); DB.ready=true;
     if(!c.ind){ setSync('busy','Subiendo los datos a la base…'); sync(); return; }   // base vacía: se sube lo de este navegador
     if(getPend()){ mezclar(S,sdb); invalidar(); render(); sync(); return; }             // cambios de este navegador sin subir
     S=sdb; invalidar(); guardarLocal(); render(); setSync('ok','Conectado a la base');
+    // Con la clave, si los gatillos guardados no están al día (primera vez, mes nuevo, cambio de la regla), se actualizan solos.
+    if(getClave()&&foto(S).gatillos!==DB.snap.gatillos) sync();
   }).catch(function(){ setSync('err','Sin conexión con la base · los cambios quedan en este navegador'); });
 }
 function abrirClave(){

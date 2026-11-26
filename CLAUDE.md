@@ -112,3 +112,9 @@ Abre `index.html` con doble clic (sin base: el Worker solo acepta GitHub Pages y
 - Septiembre y octubre 2026 ya tienen datos reales en la planilla completa (si el usuario la carga). Revisar el gatillo de noviembre de Crítica, Devolución y Tiempo interno: septiembre no se pudo depurar (el gatillo fijo no corresponde a la escala de los datos).
 - Crítica y No cargado cambiaron de unidad en julio 2026 (de % a HL); los gatillos fijos de feb–jun quedaron en %.
 - Cambiar la clave de edición: `npx.cmd wrangler secret put EDIT_KEY` dentro de `gatillos-api/` (en PowerShell `npx` sin `.cmd` está bloqueado).
+
+## Gatillos guardados en la base (config "gatillos", desde 2026-11-26)
+- `gatillosParaBase()` arma `{v, hasta, tol, ind:{id:{n,s,u,a,m:{"AAAA-MM":[relato,5XQ,'f'|'c']}}}, regs:{id:{"AAAA-MM-DD":"R"|"5"|"5R"}}}`: todos los indicadores, desde el primer mes con datos hasta el mes siguiente al actual, y qué registros de los Forms hay por día (unidos con `regIndex`).
+- Va en `foto()` como una sección más: `sync()` la sube con `PUT /api/config/gatillos` cuando cambia. En `pull()` se compara con lo guardado; si hay clave en el navegador y no coincide (primera vez, mes nuevo, regla cambiada), se sube sola.
+- La usa `pizarrasPages` (https://jerez129.github.io/pizarrasPages/): solo la lee, no calcula gatillos. Si cambia la regla aquí, basta con abrir esta página con la clave.
+- El Worker acepta la clave `gatillos` en `CONFIG_KEYS`.
