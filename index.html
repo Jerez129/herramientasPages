@@ -481,10 +481,21 @@ function gatillo(ind,mes){
   if(fx!=null){r.v=fx;r.fuente='fijo';} else if(r.calc!=null){r.v=r.calc;r.fuente='calc';}
   r.v5 = r.v==null?null : (ind.sentido==='Mayor peor' ? r.v-Math.abs(r.v)*ind.margen/100 : r.v+Math.abs(r.v)*ind.margen/100);
   // El gatillo marca una anomalía por mal resultado: siempre queda por encima de la meta, nunca igual.
-  // Relato: al menos meta + 5 %. 5XQ: al menos meta + 2,5 % (a mitad de camino). En Menor peor es al revés (meta − 5 % y − 2,5 %).
-  // Un gatillo fijo se respeta tal cual.
-  var mt=ind.meta, mas=ind.sentido==='Mayor peor', lim=function(p){return mas?mt+Math.abs(mt)*p:mt-Math.abs(mt)*p;}, masExigente=function(x,l){return mas?x<l:x>l;};
-  if(r.fuente==='calc'&&mt!=null){ if(masExigente(r.v,lim(0.05))){r.v=lim(0.05);r.porMeta=true;} if(masExigente(r.v5,lim(0.025))) r.v5=lim(0.025); }
+  // Relato: al menos meta + ½ desviación. 5XQ: al menos meta + ¼ desviación (a mitad de camino). En Menor peor es al revés.
+  // La desviación es la de la historia sin atípicos; si al quitarlos no queda historia (pasa con Crítica, siempre fuera de meta),
+  // se usa la de todos los datos de esos meses y el gatillo queda en meta + ½ desviación (r.sinHist). Un gatillo fijo se respeta tal cual.
+  var mt=ind.meta, mas=ind.sentido==='Mayor peor';
+  if(mt!=null&&r.fuente!=='fijo'){
+    var sdM=r.sd;
+    if(isNaN(sdM)){ var todos=[]; Object.keys(porMes).forEach(function(m){porMes[m].forEach(function(x){todos.push(x.v);});}); sdM=stdev(todos); }
+    if(!isNaN(sdM)){
+      var lim=function(f){return mas?mt+f*sdM:mt-f*sdM;}, masExigente=function(x,l){return x==null||(mas?x<l:x>l);};
+      if(r.fuente==null){ r.fuente='calc'; r.sinHist=true; }
+      if(masExigente(r.v,lim(0.5))){ r.v=lim(0.5); r.porMeta=true; }
+      if(masExigente(r.v5,lim(0.25))) r.v5=lim(0.25);
+      r.sdMeta=sdM;
+    }
+  }
   GC[key]=r; return r;
 }
 function nivel(ind,v,g){
@@ -783,7 +794,7 @@ function monthbar(){
 }
 function fuenteTxt(ind,g){
   if(g.fuente==='fijo') return '<span class="tag fx" title="Escrito a mano">Fijo</span>'+(g.calc!=null?' <span class="extra">calculado '+esc(fmt(g.calc,ind.unidad))+'</span>':'');
-  if(g.fuente==='calc'&&g.porMeta) return '<span class="tag" title="El cálculo no quedaba por encima de la meta + 5 %">Meta + 5 %</span> <span class="extra">calculado '+esc(fmt(g.calc,ind.unidad))+'</span>';
+  if(g.fuente==='calc'&&g.porMeta) return '<span class="tag" title="El cálculo no quedaba por encima de la meta + ½ desviación">Meta + ½ desv.</span> <span class="extra">'+(g.sinHist?'sin historia: todos los días fueron atípicos':'calculado '+esc(fmt(g.calc,ind.unidad)))+'</span>';
   if(g.fuente==='calc') return '<span class="extra">'+g.n+' datos'+(g.excl?' ('+g.excl+' atípico'+(g.excl>1?'s':'')+' fuera)':'')+' · '+MES3[+g.desde.slice(5,7)-1]+'–'+MES3[+g.hasta.slice(5,7)-1]+(g.mesesCon<ind.meses?' · <b style="color:var(--crit)">faltan '+(ind.meses-g.mesesCon)+' mes'+(ind.meses-g.mesesCon>1?'es':'')+'</b>':'')+'</span>';
   return '<span class="extra" style="color:var(--crit)">Sin datos de '+MES3[+g.desde.slice(5,7)-1]+'–'+MES3[+g.hasta.slice(5,7)-1]+'</span>';
 }
@@ -1052,7 +1063,7 @@ function vGat(){
     h+='<tr><td class="name"><button type="button" data-act="verind" data-id="'+i.id+'">'+esc(i.nombre)+'</button><div class="extra">'+esc(i.unidad)+' · '+esc(i.sentido)+'</div></td>';
     for(var m=1;m<=12;m++){
       var mm=y+'-'+pad(m), g=gatillo(i,mm), v=tipo==='R'?g.v:g.v5;
-      h+='<td class="g"><button type="button" data-act="editg" data-id="'+i.id+'" data-m="'+mm+'" class="'+(g.fuente==='fijo'?'fx ':'')+(mm===cur?'cur ':'')+(v==null?'empty':'')+'" title="'+esc(g.fuente==='fijo'?'Fijo a mano':g.fuente==='calc'?(g.porMeta?'Meta + 5 % (el cálculo daba '+fmt(g.calc,i.unidad)+') · ':'')+g.n+' datos de '+g.desde+' a '+g.hasta+(g.excl?' · '+g.excl+' días atípicos fuera':''):'Sin datos suficientes')+'">'+esc(fmt(v,i.unidad))+'</button></td>';
+      h+='<td class="g"><button type="button" data-act="editg" data-id="'+i.id+'" data-m="'+mm+'" class="'+(g.fuente==='fijo'?'fx ':'')+(mm===cur?'cur ':'')+(v==null?'empty':'')+'" title="'+esc(g.fuente==='fijo'?'Fijo a mano':g.fuente==='calc'?(g.porMeta?'Meta + ½ desviación ('+(g.sinHist?'sin historia':'el cálculo daba '+fmt(g.calc,i.unidad))+') · ':'')+g.n+' datos de '+g.desde+' a '+g.hasta+(g.excl?' · '+g.excl+' días atípicos fuera':''):'Sin datos suficientes')+'">'+esc(fmt(v,i.unidad))+'</button></td>';
     }
     h+='</tr>';
   });
@@ -1081,7 +1092,7 @@ function vDet(){
   var h='<div class="sechead"><div class="row"><label class="vh" for="selInd">Indicador</label><select id="selInd" data-chg="ind">'+ins.map(function(x){return '<option value="'+x.id+'"'+(x.id===i.id?' selected':'')+'>'+esc(x.nombre)+'</option>';}).join('')+'</select>'+monthbar()+'</div>'+
     '<div class="legend">'+chip('crit','Gatillo relato '+fmt(g.v,i.unidad))+chip('warn','Gatillo 5XQ '+fmt(g.v5,i.unidad))+'</div></div>';
   h+='<section class="card"><div class="sechead"><div><span class="lbl">'+esc(i.area)+' · '+esc(i.sentido)+' · k='+i.k+'</span><h2>'+esc(i.nombre)+' en '+esc(mesNombre(UI.mes))+'</h2><p class="sub">'+
-    (g.fuente==='fijo'?'Gatillo fijo a mano.':g.fuente==='calc'?(g.porMeta?'Gatillo = meta + 5 % (meta '+fmt(i.meta,i.unidad)+'): el cálculo daba '+fmt(g.calc,i.unidad)+', que no quedaba por encima. ':'')+'Gatillo calculado con '+g.n+' datos del '+fechaCorta(g.desde)+' al '+fechaCorta(g.hasta)+': promedio '+fmt(g.prom,i.unidad)+', desviación '+fmt(g.sd,i.unidad)+'.'+
+    (g.fuente==='fijo'?'Gatillo fijo a mano.':g.fuente==='calc'?(g.porMeta?'Gatillo = meta + ½ desviación ('+fmt(i.meta,i.unidad)+' + ½ × '+fmt(g.sdMeta,i.unidad)+'): '+(g.sinHist?'todos los días de esos meses pasaron su gatillo, así que no quedó historia para calcular. ':'el cálculo daba '+fmt(g.calc,i.unidad)+', que no quedaba por encima. '):'')+(g.sinHist?'':'Gatillo calculado con '+g.n+' datos del '+fechaCorta(g.desde)+' al '+fechaCorta(g.hasta)+': promedio '+fmt(g.prom,i.unidad)+', desviación '+fmt(g.sd,i.unidad)+'.')+
       (g.excl?' Se quitaron '+g.excl+' días atípicos (pasaron el gatillo de su mes).':''):'Sin gatillo: faltan datos del '+fechaCorta(g.desde)+' al '+fechaCorta(g.hasta)+'.')+
     '</p></div><button type="button" data-act="editg" data-id="'+i.id+'" data-m="'+UI.mes+'">Cambiar gatillo</button></div>'+
     '<div class="chartbox" id="chart"></div></section>';
