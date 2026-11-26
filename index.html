@@ -458,24 +458,24 @@ function activos(){return S.ind.filter(function(i){return i.activo;});}
 /* Igual que las hojas mensuales del Excel: promedio ± k × desviación estándar (muestra) de los meses de historia.
    Mayor peor suma; Menor peor resta. Un gatillo fijo (escrito a mano) manda sobre el cálculo.
    Días atípicos: de cada mes de historia se quitan los días que pasaron el gatillo de relato de ese mismo mes,
-   como se hacía a mano en el Excel (se puede apagar en Ajustes: S.cfg.excluir=false). No se quitan los datos inventados,
-   ni nada en un mes donde se iría más de la mitad: eso indica que el gatillo de ese mes no corresponde a la escala de los datos. */
+   como se hacía a mano en el Excel, siempre, sin excepciones (acordado con el usuario; se puede apagar en Ajustes: S.cfg.excluir=false).
+   No se quitan los datos inventados, que se hicieron para cuadrar los gatillos fijos. */
 var GC={};
 function excluyeAtipicos(){return S.cfg.excluir!==false;}
 function gatillo(ind,mes){
   var key=ind.id+'|'+mes; if(GC[key]) return GC[key];
   var desde=addMes(mes,-ind.meses)+'-01', hasta=addMes(mes,-1)+'-'+pad(diasMes(addMes(mes,-1)));
-  var vals=[], dd=S.datos[ind.id]||{}, meses={}, porMes={}, excl=0, sinExcl=[];
+  var vals=[], dd=S.datos[ind.id]||{}, meses={}, porMes={}, excl=0;
   for(var f in dd){ if(f>=desde&&f<=hasta&&dd[f].v!=null) (porMes[f.slice(0,7)]=porMes[f.slice(0,7)]||[]).push(dd[f]); }
   Object.keys(porMes).sort().forEach(function(m){
     var lista=porMes[m], g=excluyeAtipicos()?gatillo(ind,m):null;
     if(g&&g.v!=null){
       var q=lista.filter(function(x){return x.o==='i'||nivel(ind,x.v,g)!=='R';});
-      if(q.length<lista.length){ if(q.length>=Math.max(2,lista.length*0.5)){excl+=lista.length-q.length; lista=q;} else sinExcl.push(m); }
+      excl+=lista.length-q.length; lista=q;
     }
-    lista.forEach(function(x){vals.push(x.v);}); meses[m]=1;
+    lista.forEach(function(x){vals.push(x.v);}); if(lista.length) meses[m]=1;
   });
-  var r={desde:desde,hasta:hasta,n:vals.length,excl:excl,sinExcl:sinExcl,mesesCon:Object.keys(meses).length,prom:vals.length?mean(vals):null,sd:stdev(vals),calc:null,v:null,fuente:null};
+  var r={desde:desde,hasta:hasta,n:vals.length,excl:excl,mesesCon:Object.keys(meses).length,prom:vals.length?mean(vals):null,sd:stdev(vals),calc:null,v:null,fuente:null};
   if(vals.length>=2&&!isNaN(r.sd)) r.calc= ind.sentido==='Mayor peor' ? r.prom+ind.k*r.sd : r.prom-ind.k*r.sd;
   var fx=(S.fijos[ind.id]||{})[mes];
   if(fx!=null){r.v=fx;r.fuente='fijo';} else if(r.calc!=null){r.v=r.calc;r.fuente='calc';}
@@ -1082,8 +1082,7 @@ function vDet(){
     '<div class="legend">'+chip('crit','Gatillo relato '+fmt(g.v,i.unidad))+chip('warn','Gatillo 5XQ '+fmt(g.v5,i.unidad))+'</div></div>';
   h+='<section class="card"><div class="sechead"><div><span class="lbl">'+esc(i.area)+' · '+esc(i.sentido)+' · k='+i.k+'</span><h2>'+esc(i.nombre)+' en '+esc(mesNombre(UI.mes))+'</h2><p class="sub">'+
     (g.fuente==='fijo'?'Gatillo fijo a mano.':g.fuente==='calc'?(g.porMeta?'Gatillo = meta + 5 % (meta '+fmt(i.meta,i.unidad)+'): el cálculo daba '+fmt(g.calc,i.unidad)+', que no quedaba por encima. ':'')+'Gatillo calculado con '+g.n+' datos del '+fechaCorta(g.desde)+' al '+fechaCorta(g.hasta)+': promedio '+fmt(g.prom,i.unidad)+', desviación '+fmt(g.sd,i.unidad)+'.'+
-      (g.excl?' Se quitaron '+g.excl+' días atípicos (pasaron el gatillo de su mes).':'')+
-      (g.sinExcl.length?' En '+g.sinExcl.map(mesNombre).join(', ')+' no se quitó nada: más de la mitad de los días pasaba el gatillo de ese mes.':''):'Sin gatillo: faltan datos del '+fechaCorta(g.desde)+' al '+fechaCorta(g.hasta)+'.')+
+      (g.excl?' Se quitaron '+g.excl+' días atípicos (pasaron el gatillo de su mes).':''):'Sin gatillo: faltan datos del '+fechaCorta(g.desde)+' al '+fechaCorta(g.hasta)+'.')+
     '</p></div><button type="button" data-act="editg" data-id="'+i.id+'" data-m="'+UI.mes+'">Cambiar gatillo</button></div>'+
     '<div class="chartbox" id="chart"></div></section>';
   var vx=r.dias.some(function(d){return d.x&&d.x.o==='x';});
