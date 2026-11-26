@@ -323,7 +323,8 @@ function nuevoInd(r){
   return {id:uid(), nombre:String(r[0]||'').trim(), area:r[1]||'Distribución', unidad:UNIDADES.indexOf(r[2])>=0?r[2]:'Número',
     sentido:SENTIDOS.indexOf(r[3])>=0?r[3]:'Mayor peor', k:r[4]===''||r[4]==null||isNaN(+r[4])?2:+r[4],
     meses:r[5]===''||r[5]==null||isNaN(+r[5])?3:Math.max(1,Math.round(+r[5])), margen:r[6]===''||r[6]==null||isNaN(+r[6])?5:+r[6],
-    alias:String(r[7]||'').split(/[;\n]/).map(function(s){return s.trim();}).filter(Boolean), activo:!/^no$/i.test(String(r[8]||'Sí').trim())};
+    alias:String(r[7]||'').split(/[;\n]/).map(function(s){return s.trim();}).filter(Boolean), activo:!/^no$/i.test(String(r[8]||'Sí').trim()),
+    meta:parseVal(r[9],UNIDADES.indexOf(r[2])>=0?r[2]:'Número')};
 }
 function desdeSeed(){
   var st={v:1, ind:[], datos:{}, fijos:{}, reg:[], regMeta:{}, plan:[], cfg:{tol:1}};
@@ -479,6 +480,10 @@ function gatillo(ind,mes){
   var fx=(S.fijos[ind.id]||{})[mes];
   if(fx!=null){r.v=fx;r.fuente='fijo';} else if(r.calc!=null){r.v=r.calc;r.fuente='calc';}
   r.v5 = r.v==null?null : (ind.sentido==='Mayor peor' ? r.v-Math.abs(r.v)*ind.margen/100 : r.v+Math.abs(r.v)*ind.margen/100);
+  // El gatillo marca una anomalía por mal resultado: el calculado nunca es más exigente que la meta (el de 5XQ tampoco).
+  // Mayor peor: no baja de la meta. Menor peor: no sube de la meta. Un gatillo fijo se respeta tal cual.
+  var mt=ind.meta, mas=ind.sentido==='Mayor peor', masExigente=function(x){return mas?x<mt:x>mt;};
+  if(r.fuente==='calc'&&mt!=null){ if(masExigente(r.v)){r.v=mt;r.porMeta=true;} if(masExigente(r.v5)) r.v5=mt; }
   GC[key]=r; return r;
 }
 function nivel(ind,v,g){
@@ -739,9 +744,9 @@ function exportar(){
     ['Plan: relatos y 5XQ por hacer. Indicador, Día (fecha del dato), Tipo (Relato o 5XQ), Responsable (solo relatos), Fecha límite, Nota, Hecho (Sí/No).'],
     ['Al cargar este archivo en la página se reemplazan los indicadores, datos, gatillos fijos y el plan por los del archivo.']];
   var w=XLSX.utils.aoa_to_sheet(ins); w['!cols']=[{wch:130}]; XLSX.utils.book_append_sheet(wb,w,'Instrucciones');
-  var I=[['Indicador','Área','Unidad','Sentido','Desviaciones (k)','Meses de historia','Margen 5XQ %','Nombres en Forms','Activo']];
-  S.ind.forEach(function(i){I.push([i.nombre,i.area,i.unidad,i.sentido,i.k,i.meses,i.margen,i.alias.join('; '),i.activo?'Sí':'No']);});
-  w=XLSX.utils.aoa_to_sheet(I); w['!cols']=[{wch:28},{wch:14},{wch:12},{wch:12},{wch:14},{wch:14},{wch:13},{wch:70},{wch:8}]; XLSX.utils.book_append_sheet(wb,w,'Indicadores');
+  var I=[['Indicador','Área','Unidad','Sentido','Desviaciones (k)','Meses de historia','Margen 5XQ %','Nombres en Forms','Activo','Meta']];
+  S.ind.forEach(function(i){I.push([i.nombre,i.area,i.unidad,i.sentido,i.k,i.meses,i.margen,i.alias.join('; '),i.activo?'Sí':'No',i.meta==null?'':fmt(i.meta,i.unidad)]);});
+  w=XLSX.utils.aoa_to_sheet(I); w['!cols']=[{wch:28},{wch:14},{wch:12},{wch:12},{wch:14},{wch:14},{wch:13},{wch:70},{wch:8},{wch:10}]; XLSX.utils.book_append_sheet(wb,w,'Indicadores');
   var D=[['Indicador','Fecha','Valor','Origen']], fmts=[];
   S.ind.forEach(function(i){var dd=S.datos[i.id]||{};Object.keys(dd).sort().forEach(function(f){
     D.push([i.nombre,new Date(+f.slice(0,4),+f.slice(5,7)-1,+f.slice(8,10)),dd[f].v,dd[f].o==='x'?'Excel anterior':dd[f].o==='i'?'Inventado':dd[f].o==='m'?'Escrito en la página':'Plantilla']); fmts.push(Z[i.unidad]);});});
@@ -777,6 +782,7 @@ function monthbar(){
 }
 function fuenteTxt(ind,g){
   if(g.fuente==='fijo') return '<span class="tag fx" title="Escrito a mano">Fijo</span>'+(g.calc!=null?' <span class="extra">calculado '+esc(fmt(g.calc,ind.unidad))+'</span>':'');
+  if(g.fuente==='calc'&&g.porMeta) return '<span class="tag" title="El cálculo daba un gatillo más exigente que la meta">Meta</span> <span class="extra">calculado '+esc(fmt(g.calc,ind.unidad))+'</span>';
   if(g.fuente==='calc') return '<span class="extra">'+g.n+' datos'+(g.excl?' ('+g.excl+' atípico'+(g.excl>1?'s':'')+' fuera)':'')+' · '+MES3[+g.desde.slice(5,7)-1]+'–'+MES3[+g.hasta.slice(5,7)-1]+(g.mesesCon<ind.meses?' · <b style="color:var(--crit)">faltan '+(ind.meses-g.mesesCon)+' mes'+(ind.meses-g.mesesCon>1?'es':'')+'</b>':'')+'</span>';
   return '<span class="extra" style="color:var(--crit)">Sin datos de '+MES3[+g.desde.slice(5,7)-1]+'–'+MES3[+g.hasta.slice(5,7)-1]+'</span>';
 }
@@ -1045,7 +1051,7 @@ function vGat(){
     h+='<tr><td class="name"><button type="button" data-act="verind" data-id="'+i.id+'">'+esc(i.nombre)+'</button><div class="extra">'+esc(i.unidad)+' · '+esc(i.sentido)+'</div></td>';
     for(var m=1;m<=12;m++){
       var mm=y+'-'+pad(m), g=gatillo(i,mm), v=tipo==='R'?g.v:g.v5;
-      h+='<td class="g"><button type="button" data-act="editg" data-id="'+i.id+'" data-m="'+mm+'" class="'+(g.fuente==='fijo'?'fx ':'')+(mm===cur?'cur ':'')+(v==null?'empty':'')+'" title="'+esc(g.fuente==='fijo'?'Fijo a mano':g.fuente==='calc'?g.n+' datos de '+g.desde+' a '+g.hasta+(g.excl?' · '+g.excl+' días atípicos fuera':''):'Sin datos suficientes')+'">'+esc(fmt(v,i.unidad))+'</button></td>';
+      h+='<td class="g"><button type="button" data-act="editg" data-id="'+i.id+'" data-m="'+mm+'" class="'+(g.fuente==='fijo'?'fx ':'')+(mm===cur?'cur ':'')+(v==null?'empty':'')+'" title="'+esc(g.fuente==='fijo'?'Fijo a mano':g.fuente==='calc'?(g.porMeta?'Meta (el cálculo daba '+fmt(g.calc,i.unidad)+') · ':'')+g.n+' datos de '+g.desde+' a '+g.hasta+(g.excl?' · '+g.excl+' días atípicos fuera':''):'Sin datos suficientes')+'">'+esc(fmt(v,i.unidad))+'</button></td>';
     }
     h+='</tr>';
   });
@@ -1074,7 +1080,7 @@ function vDet(){
   var h='<div class="sechead"><div class="row"><label class="vh" for="selInd">Indicador</label><select id="selInd" data-chg="ind">'+ins.map(function(x){return '<option value="'+x.id+'"'+(x.id===i.id?' selected':'')+'>'+esc(x.nombre)+'</option>';}).join('')+'</select>'+monthbar()+'</div>'+
     '<div class="legend">'+chip('crit','Gatillo relato '+fmt(g.v,i.unidad))+chip('warn','Gatillo 5XQ '+fmt(g.v5,i.unidad))+'</div></div>';
   h+='<section class="card"><div class="sechead"><div><span class="lbl">'+esc(i.area)+' · '+esc(i.sentido)+' · k='+i.k+'</span><h2>'+esc(i.nombre)+' en '+esc(mesNombre(UI.mes))+'</h2><p class="sub">'+
-    (g.fuente==='fijo'?'Gatillo fijo a mano.':g.fuente==='calc'?'Gatillo calculado con '+g.n+' datos del '+fechaCorta(g.desde)+' al '+fechaCorta(g.hasta)+': promedio '+fmt(g.prom,i.unidad)+', desviación '+fmt(g.sd,i.unidad)+'.'+
+    (g.fuente==='fijo'?'Gatillo fijo a mano.':g.fuente==='calc'?(g.porMeta?'Gatillo = meta ('+fmt(i.meta,i.unidad)+'): el cálculo daba '+fmt(g.calc,i.unidad)+', más exigente que la meta. ':'')+'Gatillo calculado con '+g.n+' datos del '+fechaCorta(g.desde)+' al '+fechaCorta(g.hasta)+': promedio '+fmt(g.prom,i.unidad)+', desviación '+fmt(g.sd,i.unidad)+'.'+
       (g.excl?' Se quitaron '+g.excl+' días atípicos (pasaron el gatillo de su mes).':'')+
       (g.sinExcl.length?' En '+g.sinExcl.map(mesNombre).join(', ')+' no se quitó nada: más de la mitad de los días pasaba el gatillo de ese mes.':''):'Sin gatillo: faltan datos del '+fechaCorta(g.desde)+' al '+fechaCorta(g.hasta)+'.')+
     '</p></div><button type="button" data-act="editg" data-id="'+i.id+'" data-m="'+UI.mes+'">Cambiar gatillo</button></div>'+
@@ -1173,12 +1179,13 @@ function pegarDatos(){
 function vInd(){
   var h='<section class="card"><div class="sechead"><div><span class="lbl">Catálogo</span><h2>Indicadores con gatillo</h2><p class="sub">Los cambios se guardan al salir de cada campo. "Nombres en Forms" une el indicador con los relatos y 5XQ (separados por ;). Para un nombre que se repite en varias áreas usa Área|Nombre.</p></div>'+
     '<div class="row"><button type="button" class="pri" data-act="iadd">Agregar indicador</button></div></div><div id="confirmI"></div>'+
-    '<div class="scroll" style="margin-top:10px"><table class="cat"><thead><tr><th>Indicador</th><th>Área</th><th>Unidad</th><th>Sentido</th><th class="r">k</th><th class="r">Meses<small>historia</small></th><th class="r">Margen<small>5XQ %</small></th><th>Nombres en Forms</th><th>Activo</th><th></th></tr></thead><tbody>';
+    '<div class="scroll" style="margin-top:10px"><table class="cat"><thead><tr><th>Indicador</th><th>Área</th><th>Unidad</th><th>Sentido</th><th class="r">k</th><th class="r">Meses<small>historia</small></th><th class="r">Margen<small>5XQ %</small></th><th class="r">Meta<small>el gatillo no es más exigente</small></th><th>Nombres en Forms</th><th>Activo</th><th></th></tr></thead><tbody>';
   S.ind.forEach(function(i){
     var sel=function(f,ops){return '<select data-f="'+f+'" data-id="'+i.id+'">'+ops.map(function(o){return '<option'+(o===i[f]?' selected':'')+'>'+esc(o)+'</option>';}).join('')+'</select>';};
     h+='<tr><td><input type="text" data-f="nombre" data-id="'+i.id+'" value="'+esc(i.nombre)+'" aria-label="Nombre"></td><td>'+sel('area',AREAS.indexOf(i.area)<0?AREAS.concat([i.area]):AREAS)+'</td><td>'+sel('unidad',UNIDADES)+'</td><td>'+sel('sentido',SENTIDOS)+'</td>'+
       '<td><input class="n" type="number" step="0.5" min="0" data-f="k" data-id="'+i.id+'" value="'+i.k+'" aria-label="k"></td><td><input class="n" type="number" min="1" max="24" data-f="meses" data-id="'+i.id+'" value="'+i.meses+'" aria-label="Meses de historia"></td>'+
       '<td><input class="n" type="number" step="1" min="0" max="50" data-f="margen" data-id="'+i.id+'" value="'+i.margen+'" aria-label="Margen 5XQ"></td>'+
+      '<td><input type="text" data-f="meta" data-id="'+i.id+'" value="'+(i.meta==null?'':esc(fmt(i.meta,i.unidad)))+'" placeholder="Sin meta" aria-label="Meta" style="width:96px;text-align:right"></td>'+
       '<td><input type="text" data-f="alias" data-id="'+i.id+'" value="'+esc(i.alias.join('; '))+'" aria-label="Nombres en Forms" style="min-width:260px"></td>'+
       '<td class="c"><input type="checkbox" data-f="activo" data-id="'+i.id+'"'+(i.activo?' checked':'')+' aria-label="Activo"></td>'+
       '<td><button type="button" class="rm" data-act="idel" data-id="'+i.id+'" aria-label="Eliminar '+esc(i.nombre)+'">×</button></td></tr>';
@@ -1325,6 +1332,7 @@ document.addEventListener('change',function(e){
     if(f==='activo') i2.activo=t.checked;
     else if(f==='alias') i2.alias=t.value.split(';').map(function(s){return s.trim();}).filter(Boolean);
     else if(f==='k'||f==='margen'){var n=parseFloat(t.value); if(!isNaN(n)&&n>=0) i2[f]=n; else t.value=i2[f];}
+    else if(f==='meta'){ if(!t.value.trim()) i2.meta=null; else { var mv=parseVal(t.value,i2.unidad); if(mv==null){ t.value=i2.meta==null?'':fmt(i2.meta,i2.unidad); flash('crit','Escribe la meta como '+(i2.unidad==='Tiempo'?'1:07:00':i2.unidad==='Porcentaje'?'2.62%':'15.34')+'.'); return; } i2.meta=mv; t.value=fmt(mv,i2.unidad); } }
     else if(f==='meses'){var m=parseInt(t.value,10); if(m>=1) i2.meses=Math.min(24,m); else t.value=i2.meses;}
     else if(f==='nombre'){var v=t.value.trim(); if(!v||S.ind.some(function(x){return x!==i2&&norm(x.nombre)===norm(v);})){t.value=i2.nombre; flash('crit','Ese nombre está vacío o ya existe.');} else i2.nombre=v;}
     else if(f==='unidad'&&i2.unidad!==t.value){ i2.unidad=t.value; flash('warn','Cambiaste la unidad de '+esc(i2.nombre)+'. Los datos guardados no se convierten: revisa que estén en la nueva unidad.'); }

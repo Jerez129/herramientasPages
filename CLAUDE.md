@@ -35,6 +35,7 @@ La constante `SEED` dentro de `index.html` (una línea JSON larga) son los datos
   - **Días atípicos** (desde 2026-11-26): de cada mes de historia se quitan los días que pasaron el gatillo de relato de ese mismo mes (fijo o calculado, recursivo con `GC`), como hacía el usuario a mano. No se quitan los inventados (`o:'i'`), y en un mes donde se iría más de la mitad no se quita nada (`g.sinExcl`: el gatillo no corresponde a la escala). `g.excl` cuenta los quitados. Se apaga en Ajustes (`S.cfg.excluir=false`, se guarda en D1).
 - Gatillo 5XQ (matinal / cambio de turno) = gatillo relato ajustado `margen`% hacia lo más exigente (5%). El Excel hacía ×0.95 siempre; aquí depende del sentido.
 - Un gatillo fijo (`S.fijos[id]["AAAA-MM"]`) manda sobre el cálculo.
+- **Meta** (`ind.meta`, desde 2026-11-26): el gatillo marca una anomalía por mal resultado, así que el **calculado nunca es más exigente que la meta** (Mayor peor: no baja de la meta; Menor peor: no sube). Si el cálculo cae del lado exigente, gatillo = meta (`g.porMeta`); el de 5XQ tampoco pasa la meta. Los fijos no se tocan. La meta va en Indicadores y en la columna 10 de la hoja Indicadores. Metas que dio el usuario: Devolución 2.62 %, TML 1:07:00, Rotura Distribución 0.23, Rotura Almacén 0.20, No cargado 15.34, Crítica 26.31.
 - Un día "pasa" si: Mayor peor → valor > gatillo; Menor peor → valor < gatillo. Nivel `R` (relato) o `5` (solo 5XQ).
 - Un día está analizado si hay un registro del mismo indicador con fecha entre el día y `S.cfg.tol` días después. Nivel R exige relato; nivel 5 acepta relato o 5XQ.
 - La vista Mes muestra el cumplimiento **separado**: relatos = `hechoR / R`, 5XQ = `hecho5 / c5` (tarjetas arriba y una columna de cada uno en la tabla).
@@ -51,7 +52,7 @@ La constante `SEED` dentro de `index.html` (una línea JSON larga) son los datos
 
 ```
 S = { v:1,
-  ind:   [{id, nombre, area, unidad, sentido, k, meses, margen, alias:[...], activo}],
+  ind:   [{id, nombre, area, unidad, sentido, k, meses, margen, alias:[...], activo, meta}],
   datos: { [indId]: { "AAAA-MM-DD": {v, o} } },   // o: 'x' Excel anterior, 'p' plantilla, 'm' escrito en la página
   fijos: { [indId]: { "AAAA-MM": valor } },
   reg:   [{t:'R'|'5', f, a, ind, resp, chofer, ruta, res, pq1, causa, acc, cron}],  // de los Forms
