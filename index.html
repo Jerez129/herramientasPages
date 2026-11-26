@@ -480,10 +480,11 @@ function gatillo(ind,mes){
   var fx=(S.fijos[ind.id]||{})[mes];
   if(fx!=null){r.v=fx;r.fuente='fijo';} else if(r.calc!=null){r.v=r.calc;r.fuente='calc';}
   r.v5 = r.v==null?null : (ind.sentido==='Mayor peor' ? r.v-Math.abs(r.v)*ind.margen/100 : r.v+Math.abs(r.v)*ind.margen/100);
-  // El gatillo marca una anomalía por mal resultado: el calculado nunca es más exigente que la meta (el de 5XQ tampoco).
-  // Mayor peor: no baja de la meta. Menor peor: no sube de la meta. Un gatillo fijo se respeta tal cual.
-  var mt=ind.meta, mas=ind.sentido==='Mayor peor', masExigente=function(x){return mas?x<mt:x>mt;};
-  if(r.fuente==='calc'&&mt!=null){ if(masExigente(r.v)){r.v=mt;r.porMeta=true;} if(masExigente(r.v5)) r.v5=mt; }
+  // El gatillo marca una anomalía por mal resultado: siempre queda por encima de la meta, nunca igual.
+  // Relato: al menos meta + 5 %. 5XQ: al menos meta + 2,5 % (a mitad de camino). En Menor peor es al revés (meta − 5 % y − 2,5 %).
+  // Un gatillo fijo se respeta tal cual.
+  var mt=ind.meta, mas=ind.sentido==='Mayor peor', lim=function(p){return mas?mt+Math.abs(mt)*p:mt-Math.abs(mt)*p;}, masExigente=function(x,l){return mas?x<l:x>l;};
+  if(r.fuente==='calc'&&mt!=null){ if(masExigente(r.v,lim(0.05))){r.v=lim(0.05);r.porMeta=true;} if(masExigente(r.v5,lim(0.025))) r.v5=lim(0.025); }
   GC[key]=r; return r;
 }
 function nivel(ind,v,g){
@@ -782,7 +783,7 @@ function monthbar(){
 }
 function fuenteTxt(ind,g){
   if(g.fuente==='fijo') return '<span class="tag fx" title="Escrito a mano">Fijo</span>'+(g.calc!=null?' <span class="extra">calculado '+esc(fmt(g.calc,ind.unidad))+'</span>':'');
-  if(g.fuente==='calc'&&g.porMeta) return '<span class="tag" title="El cálculo daba un gatillo más exigente que la meta">Meta</span> <span class="extra">calculado '+esc(fmt(g.calc,ind.unidad))+'</span>';
+  if(g.fuente==='calc'&&g.porMeta) return '<span class="tag" title="El cálculo no quedaba por encima de la meta + 5 %">Meta + 5 %</span> <span class="extra">calculado '+esc(fmt(g.calc,ind.unidad))+'</span>';
   if(g.fuente==='calc') return '<span class="extra">'+g.n+' datos'+(g.excl?' ('+g.excl+' atípico'+(g.excl>1?'s':'')+' fuera)':'')+' · '+MES3[+g.desde.slice(5,7)-1]+'–'+MES3[+g.hasta.slice(5,7)-1]+(g.mesesCon<ind.meses?' · <b style="color:var(--crit)">faltan '+(ind.meses-g.mesesCon)+' mes'+(ind.meses-g.mesesCon>1?'es':'')+'</b>':'')+'</span>';
   return '<span class="extra" style="color:var(--crit)">Sin datos de '+MES3[+g.desde.slice(5,7)-1]+'–'+MES3[+g.hasta.slice(5,7)-1]+'</span>';
 }
@@ -1051,7 +1052,7 @@ function vGat(){
     h+='<tr><td class="name"><button type="button" data-act="verind" data-id="'+i.id+'">'+esc(i.nombre)+'</button><div class="extra">'+esc(i.unidad)+' · '+esc(i.sentido)+'</div></td>';
     for(var m=1;m<=12;m++){
       var mm=y+'-'+pad(m), g=gatillo(i,mm), v=tipo==='R'?g.v:g.v5;
-      h+='<td class="g"><button type="button" data-act="editg" data-id="'+i.id+'" data-m="'+mm+'" class="'+(g.fuente==='fijo'?'fx ':'')+(mm===cur?'cur ':'')+(v==null?'empty':'')+'" title="'+esc(g.fuente==='fijo'?'Fijo a mano':g.fuente==='calc'?(g.porMeta?'Meta (el cálculo daba '+fmt(g.calc,i.unidad)+') · ':'')+g.n+' datos de '+g.desde+' a '+g.hasta+(g.excl?' · '+g.excl+' días atípicos fuera':''):'Sin datos suficientes')+'">'+esc(fmt(v,i.unidad))+'</button></td>';
+      h+='<td class="g"><button type="button" data-act="editg" data-id="'+i.id+'" data-m="'+mm+'" class="'+(g.fuente==='fijo'?'fx ':'')+(mm===cur?'cur ':'')+(v==null?'empty':'')+'" title="'+esc(g.fuente==='fijo'?'Fijo a mano':g.fuente==='calc'?(g.porMeta?'Meta + 5 % (el cálculo daba '+fmt(g.calc,i.unidad)+') · ':'')+g.n+' datos de '+g.desde+' a '+g.hasta+(g.excl?' · '+g.excl+' días atípicos fuera':''):'Sin datos suficientes')+'">'+esc(fmt(v,i.unidad))+'</button></td>';
     }
     h+='</tr>';
   });
@@ -1080,7 +1081,7 @@ function vDet(){
   var h='<div class="sechead"><div class="row"><label class="vh" for="selInd">Indicador</label><select id="selInd" data-chg="ind">'+ins.map(function(x){return '<option value="'+x.id+'"'+(x.id===i.id?' selected':'')+'>'+esc(x.nombre)+'</option>';}).join('')+'</select>'+monthbar()+'</div>'+
     '<div class="legend">'+chip('crit','Gatillo relato '+fmt(g.v,i.unidad))+chip('warn','Gatillo 5XQ '+fmt(g.v5,i.unidad))+'</div></div>';
   h+='<section class="card"><div class="sechead"><div><span class="lbl">'+esc(i.area)+' · '+esc(i.sentido)+' · k='+i.k+'</span><h2>'+esc(i.nombre)+' en '+esc(mesNombre(UI.mes))+'</h2><p class="sub">'+
-    (g.fuente==='fijo'?'Gatillo fijo a mano.':g.fuente==='calc'?(g.porMeta?'Gatillo = meta ('+fmt(i.meta,i.unidad)+'): el cálculo daba '+fmt(g.calc,i.unidad)+', más exigente que la meta. ':'')+'Gatillo calculado con '+g.n+' datos del '+fechaCorta(g.desde)+' al '+fechaCorta(g.hasta)+': promedio '+fmt(g.prom,i.unidad)+', desviación '+fmt(g.sd,i.unidad)+'.'+
+    (g.fuente==='fijo'?'Gatillo fijo a mano.':g.fuente==='calc'?(g.porMeta?'Gatillo = meta + 5 % (meta '+fmt(i.meta,i.unidad)+'): el cálculo daba '+fmt(g.calc,i.unidad)+', que no quedaba por encima. ':'')+'Gatillo calculado con '+g.n+' datos del '+fechaCorta(g.desde)+' al '+fechaCorta(g.hasta)+': promedio '+fmt(g.prom,i.unidad)+', desviación '+fmt(g.sd,i.unidad)+'.'+
       (g.excl?' Se quitaron '+g.excl+' días atípicos (pasaron el gatillo de su mes).':'')+
       (g.sinExcl.length?' En '+g.sinExcl.map(mesNombre).join(', ')+' no se quitó nada: más de la mitad de los días pasaba el gatillo de ese mes.':''):'Sin gatillo: faltan datos del '+fechaCorta(g.desde)+' al '+fechaCorta(g.hasta)+'.')+
     '</p></div><button type="button" data-act="editg" data-id="'+i.id+'" data-m="'+UI.mes+'">Cambiar gatillo</button></div>'+
@@ -1179,7 +1180,7 @@ function pegarDatos(){
 function vInd(){
   var h='<section class="card"><div class="sechead"><div><span class="lbl">Catálogo</span><h2>Indicadores con gatillo</h2><p class="sub">Los cambios se guardan al salir de cada campo. "Nombres en Forms" une el indicador con los relatos y 5XQ (separados por ;). Para un nombre que se repite en varias áreas usa Área|Nombre.</p></div>'+
     '<div class="row"><button type="button" class="pri" data-act="iadd">Agregar indicador</button></div></div><div id="confirmI"></div>'+
-    '<div class="scroll" style="margin-top:10px"><table class="cat"><thead><tr><th>Indicador</th><th>Área</th><th>Unidad</th><th>Sentido</th><th class="r">k</th><th class="r">Meses<small>historia</small></th><th class="r">Margen<small>5XQ %</small></th><th class="r">Meta<small>el gatillo no es más exigente</small></th><th>Nombres en Forms</th><th>Activo</th><th></th></tr></thead><tbody>';
+    '<div class="scroll" style="margin-top:10px"><table class="cat"><thead><tr><th>Indicador</th><th>Área</th><th>Unidad</th><th>Sentido</th><th class="r">k</th><th class="r">Meses<small>historia</small></th><th class="r">Margen<small>5XQ %</small></th><th class="r">Meta<small>el gatillo queda por encima</small></th><th>Nombres en Forms</th><th>Activo</th><th></th></tr></thead><tbody>';
   S.ind.forEach(function(i){
     var sel=function(f,ops){return '<select data-f="'+f+'" data-id="'+i.id+'">'+ops.map(function(o){return '<option'+(o===i[f]?' selected':'')+'>'+esc(o)+'</option>';}).join('')+'</select>';};
     h+='<tr><td><input type="text" data-f="nombre" data-id="'+i.id+'" value="'+esc(i.nombre)+'" aria-label="Nombre"></td><td>'+sel('area',AREAS.indexOf(i.area)<0?AREAS.concat([i.area]):AREAS)+'</td><td>'+sel('unidad',UNIDADES)+'</td><td>'+sel('sentido',SENTIDOS)+'</td>'+
