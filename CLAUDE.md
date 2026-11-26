@@ -32,6 +32,7 @@ La constante `SEED` dentro de `index.html` (una línea JSON larga) son los datos
 - Gatillo relato = promedio ± k × desviación estándar **de muestra** (STDEV) de los datos de los `meses` anteriores (por defecto 3: el gatillo de noviembre usa agosto–octubre).
   - "Mayor peor" suma, "Menor peor" resta. k por indicador (1 Almacén, 2 Distribución en el Excel).
   - Se necesitan al menos 2 datos.
+  - **Días atípicos** (desde 2026-11-26): de cada mes de historia se quitan los días que pasaron el gatillo de relato de ese mismo mes (fijo o calculado, recursivo con `GC`), como hacía el usuario a mano. No se quitan los inventados (`o:'i'`), y en un mes donde se iría más de la mitad no se quita nada (`g.sinExcl`: el gatillo no corresponde a la escala). `g.excl` cuenta los quitados. Se apaga en Ajustes (`S.cfg.excluir=false`, se guarda en D1).
 - Gatillo 5XQ (matinal / cambio de turno) = gatillo relato ajustado `margen`% hacia lo más exigente (5%). El Excel hacía ×0.95 siempre; aquí depende del sentido.
 - Un gatillo fijo (`S.fijos[id]["AAAA-MM"]`) manda sobre el cálculo.
 - Un día "pasa" si: Mayor peor → valor > gatillo; Menor peor → valor < gatillo. Nivel `R` (relato) o `5` (solo 5XQ).
